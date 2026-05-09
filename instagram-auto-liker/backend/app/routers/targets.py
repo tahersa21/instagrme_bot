@@ -1,3 +1,5 @@
+import json
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -38,6 +40,9 @@ def create_target(
         username=payload.username.lstrip("@").lower(),
         likes_per_run=payload.likes_per_run,
         is_enabled=payload.is_enabled,
+        comment_enabled=payload.comment_enabled,
+        comment_templates=json.dumps(payload.comment_templates, ensure_ascii=False),
+        story_watch_enabled=payload.story_watch_enabled,
     )
     db.add(target)
     db.commit()
@@ -56,6 +61,12 @@ def update_target(
         target.likes_per_run = payload.likes_per_run
     if payload.is_enabled is not None:
         target.is_enabled = payload.is_enabled
+    if payload.comment_enabled is not None:
+        target.comment_enabled = payload.comment_enabled
+    if payload.comment_templates is not None:
+        target.comment_templates = json.dumps(payload.comment_templates, ensure_ascii=False)
+    if payload.story_watch_enabled is not None:
+        target.story_watch_enabled = payload.story_watch_enabled
     db.commit()
     db.refresh(target)
     return target

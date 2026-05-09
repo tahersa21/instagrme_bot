@@ -55,6 +55,9 @@ export type Target = {
   username: string;
   likes_per_run: number;
   is_enabled: boolean;
+  comment_enabled: boolean;
+  comment_templates: string[];
+  story_watch_enabled: boolean;
   created_at: string;
 };
 

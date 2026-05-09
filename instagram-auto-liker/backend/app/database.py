@@ -32,7 +32,21 @@ def get_db() -> Generator[Session, None, None]:
 
 
 def init_db() -> None:
-    """Create all tables. Called once on app startup."""
+    """Create all tables and apply lightweight column migrations."""
+    from sqlalchemy import text
+
     from . import models  # noqa: F401  (registers models)
 
     Base.metadata.create_all(bind=engine)
+
+    _pg_migrations = [
+        "ALTER TABLE targets ADD COLUMN IF NOT EXISTS comment_enabled BOOLEAN NOT NULL DEFAULT FALSE",
+        "ALTER TABLE targets ADD COLUMN IF NOT EXISTS comment_templates TEXT NOT NULL DEFAULT '[]'",
+        "ALTER TABLE targets ADD COLUMN IF NOT EXISTS story_watch_enabled BOOLEAN NOT NULL DEFAULT FALSE",
+    ]
+    with engine.begin() as conn:
+        for stmt in _pg_migrations:
+            try:
+                conn.execute(text(stmt))
+            except Exception:
+                pass
