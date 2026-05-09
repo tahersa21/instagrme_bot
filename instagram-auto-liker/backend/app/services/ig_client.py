@@ -10,6 +10,8 @@ import json
 import logging
 from typing import Any
 
+import requests as _requests
+
 from instagrapi import Client
 from instagrapi.exceptions import (
     BadPassword,
@@ -69,6 +71,16 @@ def login_with_password(
         raise IGChallengeRequired("Instagram requires a challenge / verification") from exc
     except PleaseWaitFewMinutes as exc:
         raise IGRateLimited("Instagram asked us to wait a few minutes") from exc
+    except _requests.exceptions.HTTPError as exc:
+        status = exc.response.status_code if exc.response is not None else "?"
+        if status == 400:
+            raise IGClientError(
+                "Instagram رفض تسجيل الدخول (400). قد يكون الحساب محميًا أو يتطلب "
+                "تحقق إضافي. جرّب تسجيل الدخول عبر المتصفح أولًا ثم استخدم الكوكيز."
+            ) from exc
+        raise IGClientError(f"Instagram HTTP error {status}") from exc
+    except Exception as exc:
+        raise IGClientError(f"Instagram login failed: {exc}") from exc
     return cl, cl.get_settings()
 
 
