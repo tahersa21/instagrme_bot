@@ -12,5 +12,16 @@ paths = ["/api"]
 [services.development]
 run = "bash -c 'cd /home/runner/workspace/instagram-auto-liker/backend && uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload'"
 
+[services.production]
+
+[services.production.run]
+args = ["bash", "-c", "cd /home/runner/workspace/instagram-auto-liker/backend && uvicorn app.main:app --host 0.0.0.0 --port 8080 --workers 2"]
+
+[services.production.run.env]
+PORT = "8080"
+
+[services.production.health.startup]
+path = "/api/auth/login"
+
 [services.env]
 PORT = "8080"
