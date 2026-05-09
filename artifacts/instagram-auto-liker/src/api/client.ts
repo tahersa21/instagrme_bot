@@ -44,6 +44,7 @@ export type Account = {
   id: number;
   username: string;
   is_active: boolean;
+  has_proxy: boolean;
   last_login_at: string | null;
   last_error: string | null;
   created_at: string;

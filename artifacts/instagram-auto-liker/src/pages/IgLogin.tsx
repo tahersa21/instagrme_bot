@@ -12,6 +12,7 @@ export default function IgLogin() {
   const [password, setPassword] = useState('');
   const [verificationCode, setVerificationCode] = useState('');
   const [cookiesJson, setCookiesJson] = useState('');
+  const [proxy, setProxy] = useState('');
   const [info, setInfo] = useState<string | null>(null);
   const [infoType, setInfoType] = useState<'error' | 'warn'>('error');
   const [requires2FA, setRequires2FA] = useState(false);
@@ -22,6 +23,7 @@ export default function IgLogin() {
         username,
         password,
         verification_code: verificationCode || null,
+        proxy: proxy.trim() || null,
       });
       return data;
     },
@@ -47,6 +49,7 @@ export default function IgLogin() {
       const { data } = await api.post('/accounts/login/cookies', {
         username,
         cookies_json: cookiesJson,
+        proxy: proxy.trim() || null,
       });
       return data;
     },
@@ -164,9 +167,7 @@ export default function IgLogin() {
 
         {mode === 'cookies' && (
           <label className="block">
-            <span className="text-sm text-slate-300">
-              الصق JSON الكوكيز هنا
-            </span>
+            <span className="text-sm text-slate-300">الصق JSON الكوكيز هنا</span>
             <textarea
               className="input mt-1 h-48 font-mono text-xs"
               value={cookiesJson}
@@ -176,6 +177,25 @@ export default function IgLogin() {
             />
           </label>
         )}
+
+        {/* Optional proxy */}
+        <div className="border-t border-slate-800 pt-4">
+          <label className="block">
+            <span className="text-sm text-slate-300">
+              بروكسي (اختياري)
+            </span>
+            <input
+              className="input mt-1 font-mono text-sm"
+              value={proxy}
+              onChange={(e) => setProxy(e.target.value)}
+              placeholder="http://user:pass@host:port"
+              dir="ltr"
+            />
+            <p className="text-xs text-slate-500 mt-1">
+              يُوصى باستخدام بروكسي سكنيّ (Residential) من نفس بلد الحساب. يدعم http/socks5.
+            </p>
+          </label>
+        </div>
 
         {info && (
           <p className={`text-sm ${infoType === 'error' ? 'text-red-400' : 'text-yellow-300'}`}>

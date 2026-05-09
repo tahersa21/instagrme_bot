@@ -2,6 +2,10 @@
 
 We persist the session JSON (cookies + device) encrypted in the DB so we don't
 re-authenticate every run — this is safer for the account.
+
+Proxy support: each Account may store an encrypted proxy URL
+(http://user:pass@host:port  or  socks5://user:pass@host:port).
+The proxy is applied to every Client created for that account.
 """
 
 from __future__ import annotations
@@ -47,20 +51,37 @@ class IGRateLimited(IGClientError):
     pass
 
 
-def _new_client() -> Client:
+def _new_client(proxy: str | None = None) -> Client:
     cl = Client()
     cl.delay_range = [1, 3]
+    if proxy:
+        try:
+            cl.set_proxy(proxy)
+            logger.info("Proxy applied: %s", _mask_proxy(proxy))
+        except Exception as exc:
+            logger.warning("Failed to apply proxy %s: %s", _mask_proxy(proxy), exc)
     return cl
 
 
-def login_with_password(
-    username: str, password: str, verification_code: str | None = None
-) -> tuple[Client, dict[str, Any]]:
-    """Log in via username + password. Returns (client, session_settings_dict).
+def _mask_proxy(proxy: str) -> str:
+    """Return a safe-to-log representation with credentials hidden."""
+    try:
+        from urllib.parse import urlparse, urlunparse
+        p = urlparse(proxy)
+        masked = p._replace(netloc=f"***:***@{p.hostname}:{p.port}")
+        return urlunparse(masked)
+    except Exception:
+        return "***"
 
-    Raises IG2FARequired / IGChallengeRequired / IGBadPassword on failure.
-    """
-    cl = _new_client()
+
+def login_with_password(
+    username: str,
+    password: str,
+    verification_code: str | None = None,
+    proxy: str | None = None,
+) -> tuple[Client, dict[str, Any]]:
+    """Log in via username + password. Returns (client, session_settings_dict)."""
+    cl = _new_client(proxy)
     try:
         cl.login(username, password, verification_code=verification_code or "")
     except TwoFactorRequired as exc:
@@ -84,14 +105,13 @@ def login_with_password(
     return cl, cl.get_settings()
 
 
-def login_with_cookies(username: str, cookies_json: str) -> tuple[Client, dict[str, Any]]:
-    """Log in by importing a previously exported session/cookies JSON.
-
-    Accepts either:
-      - a full instagrapi `settings` dict (preferred)
-      - a raw browser cookies array (list of dicts)
-    """
-    cl = _new_client()
+def login_with_cookies(
+    username: str,
+    cookies_json: str,
+    proxy: str | None = None,
+) -> tuple[Client, dict[str, Any]]:
+    """Log in by importing a previously exported session/cookies JSON."""
+    cl = _new_client(proxy)
     try:
         data = json.loads(cookies_json)
     except json.JSONDecodeError as exc:
@@ -123,8 +143,16 @@ def restore_client(account: Account) -> Client:
     """Rebuild a Client from the encrypted session stored on `account`."""
     if not account.encrypted_session:
         raise IGClientError(f"No saved session for account {account.username}")
+
+    proxy: str | None = None
+    if account.encrypted_proxy:
+        try:
+            proxy = crypto.decrypt(account.encrypted_proxy)
+        except Exception as exc:
+            logger.warning("Failed to decrypt proxy for %s: %s", account.username, exc)
+
     settings_dict = json.loads(crypto.decrypt(account.encrypted_session))
-    cl = _new_client()
+    cl = _new_client(proxy)
     cl.set_settings(settings_dict)
     cl.username = account.username
     return cl

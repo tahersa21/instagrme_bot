@@ -21,6 +21,8 @@ class Account(Base):
     encrypted_password: Mapped[str | None] = mapped_column(Text, nullable=True)
     encrypted_session: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    encrypted_proxy: Mapped[str | None] = mapped_column(Text, nullable=True)
+
     is_active: Mapped[bool] = mapped_column(default=True, nullable=False)
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)

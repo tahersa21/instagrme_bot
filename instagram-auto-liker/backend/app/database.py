@@ -43,6 +43,7 @@ def init_db() -> None:
         "ALTER TABLE targets ADD COLUMN IF NOT EXISTS comment_enabled BOOLEAN NOT NULL DEFAULT FALSE",
         "ALTER TABLE targets ADD COLUMN IF NOT EXISTS comment_templates TEXT NOT NULL DEFAULT '[]'",
         "ALTER TABLE targets ADD COLUMN IF NOT EXISTS story_watch_enabled BOOLEAN NOT NULL DEFAULT FALSE",
+        "ALTER TABLE accounts ADD COLUMN IF NOT EXISTS encrypted_proxy TEXT",
     ]
     with engine.begin() as conn:
         for stmt in _pg_migrations:

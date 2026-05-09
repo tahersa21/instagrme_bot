@@ -1,4 +1,4 @@
-"""Manage Instagram accounts: login (password / cookies), list, delete."""
+"""Manage Instagram accounts: login (password / cookies), proxy, list, delete."""
 
 from __future__ import annotations
 
@@ -15,10 +15,11 @@ from ..schemas.account import (
     IGLoginCookiesRequest,
     IGLoginPasswordRequest,
     IGLoginResponse,
+    ProxyUpdateRequest,
 )
 from ..services import ig_client
 from ..services.auth import get_current_user
-from ..services.crypto import encrypt
+from ..services.crypto import decrypt, encrypt
 
 router = APIRouter(
     prefix="/api/accounts",
@@ -32,6 +33,7 @@ def _upsert_account(
     username: str,
     encrypted_session: str,
     encrypted_password: str | None = None,
+    encrypted_proxy: str | None = ...,  # type: ignore[assignment]
 ) -> Account:
     account = db.scalar(select(Account).where(Account.username == username))
     if account is None:
@@ -40,6 +42,8 @@ def _upsert_account(
     account.encrypted_session = encrypted_session
     if encrypted_password is not None:
         account.encrypted_password = encrypted_password
+    if encrypted_proxy is not ...:
+        account.encrypted_proxy = encrypted_proxy
     account.is_active = True
     account.last_login_at = datetime.utcnow()
     account.last_error = None
@@ -48,18 +52,26 @@ def _upsert_account(
     return account
 
 
+def _to_out(account: Account) -> AccountOut:
+    out = AccountOut.model_validate(account)
+    out.has_proxy = bool(account.encrypted_proxy)
+    return out
+
+
 @router.get("", response_model=list[AccountOut])
-def list_accounts(db: Session = Depends(get_db)) -> list[Account]:
-    return list(db.scalars(select(Account).order_by(Account.created_at.desc())))
+def list_accounts(db: Session = Depends(get_db)) -> list[AccountOut]:
+    accounts = list(db.scalars(select(Account).order_by(Account.created_at.desc())))
+    return [_to_out(a) for a in accounts]
 
 
 @router.post("/login/password", response_model=IGLoginResponse)
 def login_password(
     payload: IGLoginPasswordRequest, db: Session = Depends(get_db)
 ) -> IGLoginResponse:
+    proxy = payload.proxy or None
     try:
         _, settings_dict = ig_client.login_with_password(
-            payload.username, payload.password, payload.verification_code
+            payload.username, payload.password, payload.verification_code, proxy=proxy
         )
     except ig_client.IG2FARequired:
         return IGLoginResponse(
@@ -86,23 +98,60 @@ def login_password(
         payload.username,
         ig_client.session_to_encrypted_blob(settings_dict),
         encrypted_password=encrypt(payload.password),
+        encrypted_proxy=encrypt(proxy) if proxy else None,
     )
-    return IGLoginResponse(account=AccountOut.model_validate(account))
+    return IGLoginResponse(account=_to_out(account))
 
 
 @router.post("/login/cookies", response_model=IGLoginResponse)
 def login_cookies(
     payload: IGLoginCookiesRequest, db: Session = Depends(get_db)
 ) -> IGLoginResponse:
+    proxy = payload.proxy or None
     try:
-        _, settings_dict = ig_client.login_with_cookies(payload.username, payload.cookies_json)
+        _, settings_dict = ig_client.login_with_cookies(
+            payload.username, payload.cookies_json, proxy=proxy
+        )
     except ig_client.IGClientError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
     account = _upsert_account(
-        db, payload.username, ig_client.session_to_encrypted_blob(settings_dict)
+        db,
+        payload.username,
+        ig_client.session_to_encrypted_blob(settings_dict),
+        encrypted_proxy=encrypt(proxy) if proxy else None,
     )
-    return IGLoginResponse(account=AccountOut.model_validate(account))
+    return IGLoginResponse(account=_to_out(account))
+
+
+@router.patch("/{account_id}/proxy", response_model=AccountOut)
+def update_proxy(
+    account_id: int, payload: ProxyUpdateRequest, db: Session = Depends(get_db)
+) -> AccountOut:
+    """Set or clear the proxy for an existing account."""
+    account = db.get(Account, account_id)
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+
+    if payload.proxy:
+        # Basic format validation
+        if not (
+            payload.proxy.startswith("http://")
+            or payload.proxy.startswith("https://")
+            or payload.proxy.startswith("socks5://")
+            or payload.proxy.startswith("socks4://")
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail="صيغة البروكسي غير صحيحة. استخدم: http://user:pass@host:port أو socks5://host:port",
+            )
+        account.encrypted_proxy = encrypt(payload.proxy)
+    else:
+        account.encrypted_proxy = None
+
+    db.commit()
+    db.refresh(account)
+    return _to_out(account)
 
 
 @router.delete("/{account_id}", status_code=status.HTTP_204_NO_CONTENT)
