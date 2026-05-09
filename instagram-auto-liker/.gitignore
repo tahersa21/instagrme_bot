@@ -1,0 +1,39 @@
+# env / secrets
+.env
+.env.local
+*.env.local
+
+# data
+data/
+*.db
+*.sqlite
+*.sqlite3
+
+# python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# node
+node_modules/
+dist/
+build/
+.DS_Store
+
+# editor
+.vscode/
+.idea/
+*.swp
+
+# build artifacts
+*.log
+
+# build artifacts
+*.tsbuildinfo
+frontend/vite.config.d.ts
+frontend/vite.config.js

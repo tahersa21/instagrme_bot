@@ -1,36 +1,44 @@
-# [Project name]
+# Instagram Auto Liker
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+A self-hosted dashboard for automatically liking Instagram posts from target accounts, with rate limiting and scheduling.
 
 ## Run & Operate
 
-- `pnpm --filter @workspace/api-server run dev` — run the API server (port 5000)
-- `pnpm run typecheck` — full typecheck across all packages
-- `pnpm run build` — typecheck + build all packages
-- `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
-- `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- Required env: `DATABASE_URL` — Postgres connection string
+- **Frontend** (`artifacts/instagram-auto-liker: web`): React + Vite on port 18962, preview at `/`
+- **Backend** (`artifacts/api-server: API Server`): Python FastAPI (uvicorn) on port 8080, serves `/api`
+- Login credentials: **admin / admin123** (configurable via `ADMIN_USERNAME` / `ADMIN_PASSWORD` env vars)
 
 ## Stack
 
 - pnpm workspaces, Node.js 24, TypeScript 5.9
-- API: Express 5
-- DB: PostgreSQL + Drizzle ORM
-- Validation: Zod (`zod/v4`), `drizzle-zod`
-- API codegen: Orval (from OpenAPI spec)
-- Build: esbuild (CJS bundle)
+- **Frontend**: React 19, Vite 7, Tailwind CSS v4, React Router v6, TanStack Query, Axios
+- **Backend**: Python 3.11, FastAPI, SQLAlchemy + PostgreSQL, APScheduler, instagrapi, python-jose, Fernet encryption
+- **Auth**: JWT bearer tokens (dashboard login), Fernet symmetric encryption for Instagram session storage
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- `artifacts/instagram-auto-liker/src/` — React frontend source
+  - `api/client.ts` — axios instance + auth helpers + type definitions
+  - `pages/` — Login, Dashboard, IgLogin, Targets, Schedule, Logs
+  - `components/Layout.tsx` — sidebar + nav
+- `instagram-auto-liker/backend/app/` — FastAPI backend
+  - `main.py` — app factory, CORS, router registration
+  - `routers/` — accounts, targets, runs, logs, settings, auth
+  - `services/` — ig_client, liker, scheduler, crypto, auth
+  - `models/` — SQLAlchemy ORM: Account, Target, Run, LikeLog, SettingsKV
+- `artifacts/api-server/.replit-artifact/artifact.toml` — runs uvicorn for the Python backend
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- The Node.js `api-server` artifact was repurposed to run the Python FastAPI backend via its workflow run command.
+- All Instagram session data (cookies, passwords) is Fernet-encrypted before DB storage using `MASTER_KEY`.
+- Dashboard auth uses a separate JWT with `JWT_SECRET`; Instagram auth is handled by instagrapi.
+- The PostgreSQL `DATABASE_URL` env var is used automatically by SQLAlchemy (psycopg2-binary driver).
+- APScheduler runs inside the FastAPI process for background like jobs.
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+Users log in to the dashboard (admin/admin123), connect their Instagram accounts (by password or session cookies), set target accounts to like posts from, configure rate limits and schedules, and trigger manual or automatic like runs.
 
 ## User preferences
 
@@ -38,7 +46,10 @@ _Populate as you build — explicit user instructions worth remembering across s
 
 ## Gotchas
 
-_Populate as you build — sharp edges, "always run X before Y" rules._
+- The Python backend must run from `/home/runner/workspace/instagram-auto-liker/backend` — absolute path required in the artifact.toml run command.
+- `MASTER_KEY` and `JWT_SECRET` must stay stable — changing them invalidates all stored encrypted sessions.
+- `DATABASE_URL` is taken from the Replit environment (PostgreSQL); SQLite is NOT used despite the .env default.
+- Tailwind v4 in use — cannot use `@apply` with custom component class names (e.g. `.btn`). Define styles with plain CSS properties instead.
 
 ## Pointers
 

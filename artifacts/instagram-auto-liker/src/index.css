@@ -1,0 +1,99 @@
+@import "tailwindcss";
+
+@theme inline {
+  --color-ig-pink: #e1306c;
+}
+
+@layer base {
+  body {
+    font-family: system-ui, -apple-system, 'Segoe UI', Tahoma, sans-serif;
+    background-color: #020617;
+    color: #f1f5f9;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.5rem 1rem;
+    border-radius: 0.5rem;
+    font-weight: 500;
+    transition: opacity 0.15s, background-color 0.15s;
+    background-color: #e1306c;
+    color: #fff;
+    cursor: pointer;
+  }
+  .btn-primary:hover {
+    opacity: 0.9;
+  }
+  .btn-primary:disabled {
+    opacity: 0.5;
+  }
+
+  .btn-secondary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.5rem 1rem;
+    border-radius: 0.5rem;
+    font-weight: 500;
+    transition: background-color 0.15s;
+    background-color: #1e293b;
+    color: #f1f5f9;
+    cursor: pointer;
+  }
+  .btn-secondary:hover {
+    background-color: #334155;
+  }
+  .btn-secondary:disabled {
+    opacity: 0.5;
+  }
+
+  .btn-danger {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.5rem 1rem;
+    border-radius: 0.5rem;
+    font-weight: 500;
+    transition: background-color 0.15s;
+    background-color: #dc2626;
+    color: #fff;
+    cursor: pointer;
+  }
+  .btn-danger:hover {
+    background-color: #b91c1c;
+  }
+  .btn-danger:disabled {
+    opacity: 0.5;
+  }
+
+  .input {
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+    border-radius: 0.5rem;
+    background-color: #0f172a;
+    border: 1px solid #334155;
+    color: #f1f5f9;
+  }
+  .input:focus {
+    outline: none;
+    border-color: #e1306c;
+  }
+
+  .card {
+    background-color: #0f172a;
+    border: 1px solid #1e293b;
+    border-radius: 0.75rem;
+    padding: 1.5rem;
+  }
+
+  .text-ig-pink {
+    color: #e1306c;
+  }
+  .bg-ig-pink {
+    background-color: #e1306c;
+  }
+}

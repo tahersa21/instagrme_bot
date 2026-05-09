@@ -1,0 +1,30 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    font-family: system-ui, -apple-system, 'Segoe UI', Tahoma, sans-serif;
+  }
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center px-4 py-2 rounded-lg font-medium transition;
+  }
+  .btn-primary {
+    @apply btn bg-ig-pink text-white hover:bg-pink-600 disabled:opacity-50;
+  }
+  .btn-secondary {
+    @apply btn bg-slate-800 text-slate-100 hover:bg-slate-700 disabled:opacity-50;
+  }
+  .btn-danger {
+    @apply btn bg-red-600 text-white hover:bg-red-700 disabled:opacity-50;
+  }
+  .input {
+    @apply w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-100 focus:border-ig-pink focus:outline-none;
+  }
+  .card {
+    @apply bg-slate-900 border border-slate-800 rounded-xl p-6;
+  }
+}

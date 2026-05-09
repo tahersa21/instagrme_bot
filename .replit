@@ -1,4 +1,4 @@
-modules = ["nodejs-24"]
+modules = ["nodejs-24", "python-3.11"]
 
 [deployment]
 router = "application"
@@ -18,3 +18,39 @@ expertMode = true
 [postMerge]
 path = "scripts/post-merge.sh"
 timeoutMs = 20000
+
+[[ports]]
+localPort = 8080
+externalPort = 8080
+
+[[ports]]
+localPort = 8081
+externalPort = 80
+
+[[ports]]
+localPort = 18962
+externalPort = 3000
+
+[userenv]
+
+[userenv.shared]
+ADMIN_USERNAME = "admin"
+ADMIN_PASSWORD = "admin123"
+JWT_ALGORITHM = "HS256"
+JWT_EXPIRE_MINUTES = "10080"
+DATABASE_URL_IG = "sqlite:///./data/app.db"
+DATA_DIR = "./data"
+CORS_ORIGINS = "*"
+DEFAULT_LIKES_PER_ACCOUNT = "3"
+DEFAULT_MIN_DELAY_SECONDS = "30"
+DEFAULT_MAX_DELAY_SECONDS = "90"
+DEFAULT_DAILY_LIKE_LIMIT = "100"
+DEFAULT_HOURLY_LIKE_LIMIT = "20"
+DEFAULT_SCHEDULE_INTERVAL_HOURS = "6"
+DEBUG = "false"
+MASTER_KEY = "Md544pSj_groB6jAk2fd6APYphcvV9UmmHqomkLH-3OXhClW"
+JWT_SECRET = "Jh5SLypCH1W2mn7jLzSM8ZoCr1bkMFjUsZOnUYMFemx4i_fq"
+
+[nix]
+channel = "stable-25_05"
+packages = ["cargo", "freetype", "lcms2", "libiconv", "libimagequant", "libjpeg", "libtiff", "libwebp", "libxcrypt", "openjpeg", "openssl", "pkg-config", "rustc", "tcl", "tk", "zlib"]
