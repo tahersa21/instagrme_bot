@@ -1,8 +1,11 @@
-"""Core automation job: likes, comments, and story views.
+"""Core automation job: warm-up browsing, likes, comments, and story views.
 
-Iterates target accounts, likes their latest media, optionally leaves a
-comment, and optionally marks their stories as seen — all within the
-configured rate limits.
+Flow per run:
+  1. Optional warm-up: scroll feed + explore to mimic human behaviour.
+  2. For each enabled target:
+       a. Watch stories (if enabled).
+       b. Like latest posts (with jitter delays).
+       c. Comment on liked post (if enabled, random template).
 """
 
 from __future__ import annotations
@@ -18,11 +21,12 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..config import get_settings
-from ..models import Account, LikeLog, Run, RunStatus, Target
+from ..models import Account, LikeLog, Run, RunStatus, Target, SettingsKV
 from . import ig_client
 
 logger = logging.getLogger(__name__)
 
+# ─── helpers ──────────────────────────────────────────────────────────────────
 
 def _count_likes_since(db: Session, account_id: int, since: datetime) -> int:
     stmt = select(func.count(LikeLog.id)).where(
@@ -46,6 +50,79 @@ def _pick_comment(templates: list[str]) -> str | None:
     clean = [t.strip() for t in templates if t.strip()]
     return random.choice(clean) if clean else None
 
+
+def _db_flag(db: Session, key: str, default: bool = True) -> bool:
+    row = db.get(SettingsKV, key)
+    if row is None:
+        return default
+    return row.value != "false"
+
+
+# ─── warm-up browsing ─────────────────────────────────────────────────────────
+
+def _warmup_browse(client: object) -> None:  # type: ignore[type-arg]
+    """Simulate a short human-like browsing session before doing any actions."""
+    logger.info("Starting warm-up browsing session")
+
+    actions: list[tuple[str, object]] = []  # (label, callable)
+
+    # 1. Scroll the main timeline feed
+    def _browse_timeline() -> None:
+        try:
+            feed = client.get_timeline_feed()  # type: ignore[attr-defined]
+            items = feed.get("feed_items", []) if isinstance(feed, dict) else []
+            count = min(len(items), random.randint(3, 7))
+            logger.info("Warm-up: scrolled %d timeline posts", count)
+            time.sleep(random.uniform(4, 9))
+        except Exception as exc:
+            logger.debug("Warm-up timeline browse skipped: %s", exc)
+
+    # 2. Peek at the explore / suggested feed
+    def _browse_explore() -> None:
+        try:
+            client.explore()  # type: ignore[attr-defined]
+            logger.info("Warm-up: browsed explore page")
+            time.sleep(random.uniform(3, 7))
+        except Exception as exc:
+            logger.debug("Warm-up explore browse skipped: %s", exc)
+
+    # 3. View own profile briefly
+    def _view_own_profile() -> None:
+        try:
+            client.account_info()  # type: ignore[attr-defined]
+            logger.info("Warm-up: viewed own profile")
+            time.sleep(random.uniform(2, 5))
+        except Exception as exc:
+            logger.debug("Warm-up profile view skipped: %s", exc)
+
+    # 4. View notifications (inbox) briefly
+    def _check_inbox() -> None:
+        try:
+            client.direct_threads()  # type: ignore[attr-defined]
+            logger.info("Warm-up: checked inbox")
+            time.sleep(random.uniform(2, 4))
+        except Exception as exc:
+            logger.debug("Warm-up inbox check skipped: %s", exc)
+
+    actions = [
+        ("timeline", _browse_timeline),
+        ("explore", _browse_explore),
+        ("profile", _view_own_profile),
+        ("inbox", _check_inbox),
+    ]
+
+    # Shuffle and run 2-3 random warm-up actions
+    random.shuffle(actions)
+    chosen = actions[: random.randint(2, 3)]
+    for label, fn in chosen:
+        logger.info("Warm-up action: %s", label)
+        fn()
+        time.sleep(random.uniform(1, 3))
+
+    logger.info("Warm-up complete — proceeding to main actions")
+
+
+# ─── main job ─────────────────────────────────────────────────────────────────
 
 def run_like_job(
     db: Session,
@@ -77,6 +154,13 @@ def run_like_job(
         account.last_error = str(exc)
         db.commit()
         return run
+
+    # ── Warm-up browsing ─────────────────────────────────────────────────────
+    if _db_flag(db, "warmup_enabled", default=True):
+        try:
+            _warmup_browse(client)
+        except Exception as exc:
+            logger.warning("Warm-up phase encountered an error: %s", exc)
 
     targets = list(
         db.scalars(
@@ -118,7 +202,7 @@ def run_like_job(
             except Exception as exc:
                 logger.warning("Story watch failed for @%s: %s", target.username, exc)
 
-        # ── Likes (+ optional comments) ───────────────────────────────────
+        # ── Media fetch ───────────────────────────────────────────────────────
         try:
             medias = client.user_medias(user_id, amount=target.likes_per_run)
         except LoginRequired as exc:

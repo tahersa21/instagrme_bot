@@ -8,6 +8,7 @@ class ScheduleSettingsIn(BaseModel):
     hourly_like_limit: int = Field(20, ge=1, le=100)
     min_delay_seconds: int = Field(30, ge=5, le=600)
     max_delay_seconds: int = Field(90, ge=5, le=600)
+    warmup_enabled: bool = True
 
 
 class ScheduleSettingsOut(ScheduleSettingsIn):

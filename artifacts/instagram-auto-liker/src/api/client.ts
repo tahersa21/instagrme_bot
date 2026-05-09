@@ -95,4 +95,5 @@ export type ScheduleSettings = {
   hourly_like_limit: number;
   min_delay_seconds: number;
   max_delay_seconds: number;
+  warmup_enabled: boolean;
 };

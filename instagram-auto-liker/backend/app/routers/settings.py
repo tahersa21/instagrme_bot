@@ -1,4 +1,4 @@
-"""Schedule settings — enable/disable, change interval, rate limits."""
+"""Schedule settings — enable/disable, change interval, rate limits, warmup."""
 
 from __future__ import annotations
 
@@ -25,6 +25,7 @@ KEYS = (
     "hourly_like_limit",
     "min_delay_seconds",
     "max_delay_seconds",
+    "warmup_enabled",
 )
 
 
@@ -44,6 +45,7 @@ def _set(db: Session, key: str, value: str) -> None:
 @router.get("/schedule", response_model=ScheduleSettingsOut)
 def get_schedule(db: Session = Depends(get_db)) -> ScheduleSettingsOut:
     s = get_settings()
+    warmup_raw = _get(db, "warmup_enabled")
     return ScheduleSettingsOut(
         enabled=_get(db, "schedule_enabled") == "true",
         interval_hours=int(
@@ -53,6 +55,7 @@ def get_schedule(db: Session = Depends(get_db)) -> ScheduleSettingsOut:
         hourly_like_limit=int(_get(db, "hourly_like_limit") or s.default_hourly_like_limit),
         min_delay_seconds=int(_get(db, "min_delay_seconds") or s.default_min_delay_seconds),
         max_delay_seconds=int(_get(db, "max_delay_seconds") or s.default_max_delay_seconds),
+        warmup_enabled=warmup_raw != "false",
     )
 
 
@@ -66,6 +69,7 @@ def update_schedule(
     _set(db, "hourly_like_limit", str(payload.hourly_like_limit))
     _set(db, "min_delay_seconds", str(payload.min_delay_seconds))
     _set(db, "max_delay_seconds", str(payload.max_delay_seconds))
+    _set(db, "warmup_enabled", "true" if payload.warmup_enabled else "false")
     db.commit()
 
     scheduler.reschedule(payload.interval_hours)
