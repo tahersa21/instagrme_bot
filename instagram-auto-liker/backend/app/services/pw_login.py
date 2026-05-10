@@ -39,17 +39,64 @@ logger = logging.getLogger(__name__)
 _IG_LOGIN_URL = "https://www.instagram.com/accounts/login/"
 _IG_HOME_URL  = "https://www.instagram.com/"
 
-def ensure_chromium_installed() -> None:
-    """Install Playwright Chromium if the executable is not found.
+def _chromium_can_run() -> bool:
+    """Return True if the Chromium binary exists AND its shared libs are satisfied."""
+    import subprocess
+    exe = _chromium_executable()
+    if exe is None:
+        return False
+    result = subprocess.run(
+        ["ldd", exe],
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    if result.returncode != 0:
+        return False
+    return "not found" not in result.stdout
 
-    Called once at app startup so the browser is always available even after
-    a fresh deployment or container restart that wiped the cache.
+
+def ensure_chromium_installed() -> None:
+    """Install Playwright Chromium + system dependencies if needed.
+
+    Called once at app startup (synchronously, before the server accepts
+    requests) so the browser is always available even after a fresh deployment
+    or container restart.
+
+    Strategy
+    ────────
+    1. Always run ``playwright install-deps chromium`` first — installs the
+       ~20 system libraries (libnspr4, libglib, libnss3 …) that Chrome for
+       Testing needs.  On Ubuntu/Debian this uses apt-get and is a no-op when
+       packages are already installed.
+    2. If the Chromium binary is missing **or** cannot satisfy its shared-lib
+       requirements (``ldd`` reports "not found"), run
+       ``playwright install chromium`` to (re-)download the browser.
     """
     import subprocess
-    if _chromium_executable() is not None:
-        logger.info("[pw_login] Chromium already installed — skipping install")
+
+    # --- Step 1: system deps (idempotent, fast when already installed) ---
+    logger.info("[pw_login] Installing Playwright system dependencies …")
+    try:
+        r = subprocess.run(
+            ["python3", "-m", "playwright", "install-deps", "chromium"],
+            capture_output=True,
+            text=True,
+            timeout=300,
+        )
+        if r.returncode == 0:
+            logger.info("[pw_login] System dependencies OK")
+        else:
+            logger.warning("[pw_login] install-deps exited %d: %s", r.returncode, r.stderr[:400])
+    except Exception as exc:
+        logger.warning("[pw_login] install-deps failed (non-fatal): %s", exc)
+
+    # --- Step 2: browser binary ---
+    if _chromium_can_run():
+        logger.info("[pw_login] Chromium binary OK — skipping browser install")
         return
-    logger.info("[pw_login] Chromium not found — running 'playwright install chromium' …")
+
+    logger.info("[pw_login] Chromium missing or libs unsatisfied — running 'playwright install chromium' …")
     try:
         result = subprocess.run(
             ["python3", "-m", "playwright", "install", "chromium"],
