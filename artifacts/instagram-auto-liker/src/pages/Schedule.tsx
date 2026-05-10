@@ -37,7 +37,7 @@ export default function Schedule() {
 
       <form onSubmit={submit} className="card space-y-6">
 
-        {/* Auto-schedule toggle */}
+        {/* ── Auto-schedule toggle ── */}
         <Toggle
           label="تفعيل التشغيل التلقائي في الخلفية"
           description="يُشغّل المهمة تلقائياً كل عدد ساعات محدد"
@@ -45,23 +45,64 @@ export default function Schedule() {
           onChange={(v) => setForm({ ...form, enabled: v })}
         />
 
-        {/* Warm-up toggle */}
+        {/* ── Warm-up toggle ── */}
         <div className="border-t border-slate-800 pt-5">
           <Toggle
             label="التصفح التمهيدي (Warm-up)"
-            description="يتصفح الفيد والاستكشاف وبعض الصفحات عشوائياً قبل التفاعل، لتقليل احتمال الكشف"
+            description="يتصفح الفيد والاستكشاف عشوائياً قبل التفاعل — يقلل احتمال الكشف"
             checked={form.warmup_enabled}
             onChange={(v) => setForm({ ...form, warmup_enabled: v })}
             color="blue"
           />
-          {form.warmup_enabled && (
-            <p className="mt-2 text-xs text-slate-500">
-              يختار البوت 2-3 إجراءات عشوائية: تصفح الفيد ← الاستكشاف ← الملف الشخصي ← الرسائل. المدة ~20-40 ثانية.
-            </p>
-          )}
         </div>
 
-        {/* Rate limits */}
+        {/* ── New-account mode toggle ── */}
+        <div className="border-t border-slate-800 pt-5">
+          <Toggle
+            label="وضع الحساب الجديد"
+            description="يخفض الحدود تلقائياً إلى النصف للحسابات الأقل من 30 يوماً — يقلل خطر الحظر"
+            checked={form.new_account_mode}
+            onChange={(v) => setForm({ ...form, new_account_mode: v })}
+            color="orange"
+          />
+        </div>
+
+        {/* ── Active hours window ── */}
+        <div className="border-t border-slate-800 pt-5 space-y-3">
+          <div>
+            <p className="text-sm font-medium text-slate-300">نافذة ساعات النشاط (توقيت UTC)</p>
+            <p className="text-xs text-slate-500 mt-0.5">
+              البوت لن يعمل تلقائياً خارج هذه النافذة — يحاكي ساعات استخدام بشري طبيعي
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <NumberField
+              label="من الساعة (UTC)"
+              value={form.active_hours_start}
+              min={0}
+              max={23}
+              onChange={(v) => setForm({ ...form, active_hours_start: v })}
+              suffix="ص/م"
+            />
+            <NumberField
+              label="إلى الساعة (UTC)"
+              value={form.active_hours_end}
+              min={0}
+              max={23}
+              onChange={(v) => setForm({ ...form, active_hours_end: v })}
+              suffix="ص/م"
+            />
+          </div>
+          <p className="text-xs text-slate-600">
+            الإعداد الحالي: من{' '}
+            <span className="text-slate-400">{formatHour(form.active_hours_start)}</span>
+            {' '}إلى{' '}
+            <span className="text-slate-400">{formatHour(form.active_hours_end)}</span>
+            {' '}UTC
+          </p>
+        </div>
+
+        {/* ── Rate limits ── */}
         <div className="border-t border-slate-800 pt-5">
           <p className="text-sm font-medium text-slate-300 mb-4">حدود التفاعل</p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -103,6 +144,16 @@ export default function Schedule() {
           </div>
         </div>
 
+        {/* ── Safe limits guide ── */}
+        <div className="border-t border-slate-800 pt-4">
+          <p className="text-xs text-slate-500 font-medium mb-2">دليل الحدود الآمنة:</p>
+          <div className="grid grid-cols-3 gap-2 text-xs">
+            <SafeHint label="حسابات جديدة" daily="30–50" hourly="5–8" />
+            <SafeHint label="حسابات متوسطة" daily="50–100" hourly="10–15" color="yellow" />
+            <SafeHint label="حسابات قديمة" daily="100–200" hourly="15–25" color="green" />
+          </div>
+        </div>
+
         <div className="flex gap-2 pt-2">
           <button type="submit" className="btn-primary" disabled={save.isPending}>
             حفظ
@@ -124,6 +175,35 @@ export default function Schedule() {
   );
 }
 
+function formatHour(h: number): string {
+  const period = h < 12 ? 'صباحاً' : 'مساءً';
+  const display = h === 0 ? 12 : h > 12 ? h - 12 : h;
+  return `${display}:00 ${period}`;
+}
+
+function SafeHint({
+  label,
+  daily,
+  hourly,
+  color = 'slate',
+}: {
+  label: string;
+  daily: string;
+  hourly: string;
+  color?: 'slate' | 'yellow' | 'green';
+}) {
+  const bg = { slate: 'bg-slate-800', yellow: 'bg-yellow-900/30', green: 'bg-green-900/30' }[color];
+  const text = { slate: 'text-slate-400', yellow: 'text-yellow-300', green: 'text-green-300' }[color];
+  return (
+    <div className={`${bg} rounded-lg p-2 space-y-0.5`}>
+      <p className={`font-medium ${text}`}>{label}</p>
+      <p className="text-slate-500">يومي: {daily}</p>
+      <p className="text-slate-500">بالساعة: {hourly}</p>
+    </div>
+  );
+}
+
+/* ── Toggle ──────────────────────────────────────────────────────────────── */
 function Toggle({
   label,
   description,
@@ -135,23 +215,20 @@ function Toggle({
   description?: string;
   checked: boolean;
   onChange: (v: boolean) => void;
-  color?: 'pink' | 'blue';
+  color?: 'pink' | 'blue' | 'orange';
 }) {
-  const activeColor = color === 'blue' ? '#2563eb' : '#e1306c';
+  const activeColor = { pink: '#e1306c', blue: '#2563eb', orange: '#ea580c' }[color];
   return (
     <div
       className="flex items-center justify-between gap-4 cursor-pointer select-none"
       onClick={() => onChange(!checked)}
     >
-      {/* Text — appears on the RIGHT in RTL (first child) */}
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium leading-snug">{label}</p>
         {description && (
           <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">{description}</p>
         )}
       </div>
-
-      {/* Toggle track — appears on the LEFT in RTL (last child), dir=ltr so thumb moves correctly */}
       <div
         dir="ltr"
         className="shrink-0 w-11 h-6 rounded-full flex items-center px-1 transition-colors duration-200"
@@ -166,30 +243,36 @@ function Toggle({
   );
 }
 
+/* ── NumberField ─────────────────────────────────────────────────────────── */
 function NumberField({
   label,
   value,
   min,
   max,
   onChange,
+  suffix,
 }: {
   label: string;
   value: number;
   min: number;
   max: number;
   onChange: (v: number) => void;
+  suffix?: string;
 }) {
   return (
     <label className="block">
       <span className="text-sm text-slate-300">{label}</span>
-      <input
-        type="number"
-        min={min}
-        max={max}
-        className="input mt-1"
-        value={value}
-        onChange={(e) => onChange(parseInt(e.target.value, 10) || min)}
-      />
+      <div className="flex items-center gap-2 mt-1">
+        <input
+          type="number"
+          min={min}
+          max={max}
+          className="input flex-1"
+          value={value}
+          onChange={(e) => onChange(parseInt(e.target.value, 10) || min)}
+        />
+        {suffix && <span className="text-xs text-slate-500 shrink-0">{suffix}</span>}
+      </div>
     </label>
   );
 }

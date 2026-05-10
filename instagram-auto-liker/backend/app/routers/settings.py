@@ -1,4 +1,4 @@
-"""Schedule settings — enable/disable, change interval, rate limits, warmup."""
+"""Schedule settings — enable/disable, change interval, rate limits, warmup, active hours."""
 
 from __future__ import annotations
 
@@ -26,6 +26,9 @@ KEYS = (
     "min_delay_seconds",
     "max_delay_seconds",
     "warmup_enabled",
+    "active_hours_start",
+    "active_hours_end",
+    "new_account_mode",
 )
 
 
@@ -46,6 +49,7 @@ def _set(db: Session, key: str, value: str) -> None:
 def get_schedule(db: Session = Depends(get_db)) -> ScheduleSettingsOut:
     s = get_settings()
     warmup_raw = _get(db, "warmup_enabled")
+    new_account_raw = _get(db, "new_account_mode")
     return ScheduleSettingsOut(
         enabled=_get(db, "schedule_enabled") == "true",
         interval_hours=int(
@@ -56,6 +60,9 @@ def get_schedule(db: Session = Depends(get_db)) -> ScheduleSettingsOut:
         min_delay_seconds=int(_get(db, "min_delay_seconds") or s.default_min_delay_seconds),
         max_delay_seconds=int(_get(db, "max_delay_seconds") or s.default_max_delay_seconds),
         warmup_enabled=warmup_raw != "false",
+        active_hours_start=int(_get(db, "active_hours_start") or 8),
+        active_hours_end=int(_get(db, "active_hours_end") or 23),
+        new_account_mode=new_account_raw != "false",
     )
 
 
@@ -70,6 +77,9 @@ def update_schedule(
     _set(db, "min_delay_seconds", str(payload.min_delay_seconds))
     _set(db, "max_delay_seconds", str(payload.max_delay_seconds))
     _set(db, "warmup_enabled", "true" if payload.warmup_enabled else "false")
+    _set(db, "active_hours_start", str(payload.active_hours_start))
+    _set(db, "active_hours_end", str(payload.active_hours_end))
+    _set(db, "new_account_mode", "true" if payload.new_account_mode else "false")
     db.commit()
 
     scheduler.reschedule(payload.interval_hours)

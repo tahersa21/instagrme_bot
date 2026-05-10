@@ -23,6 +23,13 @@ class Account(Base):
 
     encrypted_proxy: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    # Proxy type for UI display & safety scoring
+    proxy_type: Mapped[str | None] = mapped_column(String(20), nullable=True)  # residential|mobile_4g|datacenter
+
+    # Per-account personality profile (JSON string)
+    # {"skip_rate": 0.15, "session_style": "moderate", "warmup_count": 3}
+    personality: Mapped[str | None] = mapped_column(Text, nullable=True)
+
     is_active: Mapped[bool] = mapped_column(default=True, nullable=False)
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)

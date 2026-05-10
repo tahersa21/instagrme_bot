@@ -9,6 +9,11 @@ class ScheduleSettingsIn(BaseModel):
     min_delay_seconds: int = Field(30, ge=5, le=600)
     max_delay_seconds: int = Field(90, ge=5, le=600)
     warmup_enabled: bool = True
+    # Active-hours window (UTC). Bot only runs within this window.
+    active_hours_start: int = Field(8, ge=0, le=23, description="Start of active window (UTC hour)")
+    active_hours_end: int = Field(23, ge=0, le=23, description="End of active window (UTC hour)")
+    # New-account safety mode: auto-halve limits for accounts < 30 days old
+    new_account_mode: bool = True
 
 
 class ScheduleSettingsOut(ScheduleSettingsIn):

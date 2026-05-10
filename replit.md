@@ -19,11 +19,11 @@ A self-hosted dashboard for automatically liking Instagram posts from target acc
 
 - `artifacts/instagram-auto-liker/src/` — React frontend source
   - `api/client.ts` — axios instance + auth helpers + type definitions
-  - `pages/` — Login, Dashboard, IgLogin, Targets, Schedule, Logs
+  - `pages/` — Login, Dashboard, IgLogin, Targets, Schedule, Logs, Analytics
   - `components/Layout.tsx` — sidebar + nav
 - `instagram-auto-liker/backend/app/` — FastAPI backend
   - `main.py` — app factory, CORS, router registration
-  - `routers/` — accounts, targets, runs, logs, settings, auth
+  - `routers/` — accounts, targets, runs, logs, settings, auth, stats
   - `services/` — ig_client, liker, scheduler, crypto, auth
   - `models/` — SQLAlchemy ORM: Account, Target, Run, LikeLog, SettingsKV
 - `artifacts/api-server/.replit-artifact/artifact.toml` — runs uvicorn for the Python backend

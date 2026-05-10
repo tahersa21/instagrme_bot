@@ -15,7 +15,7 @@ export default function Layout() {
 
   return (
     <div className="min-h-screen flex">
-      <aside className="w-64 bg-slate-900 border-l border-slate-800 p-4 space-y-6">
+      <aside className="w-64 bg-slate-900 border-l border-slate-800 p-4 space-y-6 shrink-0">
         <div>
           <Link to="/" className="text-xl font-bold text-ig-pink">
             ❤︎ Auto Liker
@@ -32,6 +32,9 @@ export default function Layout() {
           <NavLink to="/schedule" className={navClass}>
             الجدولة والحدود
           </NavLink>
+          <NavLink to="/analytics" className={navClass}>
+            الإحصاءات
+          </NavLink>
         </nav>
         <button
           onClick={handleLogout}
@@ -41,7 +44,7 @@ export default function Layout() {
           تسجيل خروج
         </button>
       </aside>
-      <main className="flex-1 p-8 max-w-6xl">
+      <main className="flex-1 p-8 overflow-auto">
         <Outlet />
       </main>
     </div>

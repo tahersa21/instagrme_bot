@@ -1,7 +1,8 @@
-"""Manage Instagram accounts: login (password / cookies), proxy, list, delete."""
+"""Manage Instagram accounts: login (password / cookies), proxy, personality, list, delete."""
 
 from __future__ import annotations
 
+import json
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -15,6 +16,7 @@ from ..schemas.account import (
     IGLoginCookiesRequest,
     IGLoginPasswordRequest,
     IGLoginResponse,
+    PersonalityUpdateRequest,
     ProxyUpdateRequest,
 )
 from ..services import ig_client
@@ -27,6 +29,8 @@ router = APIRouter(
     dependencies=[Depends(get_current_user)],
 )
 
+_VALID_PROXY_TYPES = {"residential", "mobile_4g", "datacenter"}
+
 
 def _upsert_account(
     db: Session,
@@ -34,6 +38,7 @@ def _upsert_account(
     encrypted_session: str,
     encrypted_password: str | None = None,
     encrypted_proxy: str | None = ...,  # type: ignore[assignment]
+    proxy_type: str | None = ...,  # type: ignore[assignment]
 ) -> Account:
     account = db.scalar(select(Account).where(Account.username == username))
     if account is None:
@@ -44,6 +49,8 @@ def _upsert_account(
         account.encrypted_password = encrypted_password
     if encrypted_proxy is not ...:
         account.encrypted_proxy = encrypted_proxy
+    if proxy_type is not ...:
+        account.proxy_type = proxy_type
     account.is_active = True
     account.last_login_at = datetime.utcnow()
     account.last_error = None
@@ -93,12 +100,14 @@ def login_password(
     except ig_client.IGClientError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
+    ptype = payload.proxy_type if payload.proxy_type in _VALID_PROXY_TYPES else None
     account = _upsert_account(
         db,
         payload.username,
         ig_client.session_to_encrypted_blob(settings_dict),
         encrypted_password=encrypt(payload.password),
         encrypted_proxy=encrypt(proxy) if proxy else None,
+        proxy_type=ptype,
     )
     return IGLoginResponse(account=_to_out(account))
 
@@ -115,11 +124,13 @@ def login_cookies(
     except ig_client.IGClientError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
+    ptype = payload.proxy_type if payload.proxy_type in _VALID_PROXY_TYPES else None
     account = _upsert_account(
         db,
         payload.username,
         ig_client.session_to_encrypted_blob(settings_dict),
         encrypted_proxy=encrypt(proxy) if proxy else None,
+        proxy_type=ptype,
     )
     return IGLoginResponse(account=_to_out(account))
 
@@ -134,7 +145,6 @@ def update_proxy(
         raise HTTPException(status_code=404, detail="Account not found")
 
     if payload.proxy:
-        # Basic format validation
         if not (
             payload.proxy.startswith("http://")
             or payload.proxy.startswith("https://")
@@ -149,6 +159,30 @@ def update_proxy(
     else:
         account.encrypted_proxy = None
 
+    if payload.proxy_type in _VALID_PROXY_TYPES:
+        account.proxy_type = payload.proxy_type
+    elif not payload.proxy:
+        account.proxy_type = None
+
+    db.commit()
+    db.refresh(account)
+    return _to_out(account)
+
+
+@router.patch("/{account_id}/personality", response_model=AccountOut)
+def update_personality(
+    account_id: int, payload: PersonalityUpdateRequest, db: Session = Depends(get_db)
+) -> AccountOut:
+    """Update the per-account behaviour personality profile."""
+    account = db.get(Account, account_id)
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+
+    account.personality = json.dumps({
+        "skip_rate": payload.skip_rate,
+        "session_style": payload.session_style,
+        "warmup_count": payload.warmup_count,
+    })
     db.commit()
     db.refresh(account)
     return _to_out(account)

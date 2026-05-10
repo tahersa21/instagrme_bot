@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .config import get_settings
 from .database import init_db
-from .routers import accounts, auth, logs, runs, targets
+from .routers import accounts, auth, logs, runs, targets, stats
 from .routers import settings as settings_router
 from .services import scheduler
 
@@ -43,6 +43,7 @@ def create_app() -> FastAPI:
     app.include_router(runs.router)
     app.include_router(logs.router)
     app.include_router(settings_router.router)
+    app.include_router(stats.router)
 
     @app.get("/api/health", tags=["health"])
     def health() -> dict:

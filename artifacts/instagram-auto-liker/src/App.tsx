@@ -7,6 +7,7 @@ import Targets from './pages/Targets';
 import Schedule from './pages/Schedule';
 import Logs from './pages/Logs';
 import IgLogin from './pages/IgLogin';
+import Analytics from './pages/Analytics';
 
 function RequireAuth({ children }: { children: JSX.Element }) {
   return auth.isAuthed() ? children : <Navigate to="/login" replace />;
@@ -29,6 +30,7 @@ export default function App() {
         <Route path="accounts/:accountId/targets" element={<Targets />} />
         <Route path="accounts/:accountId/logs" element={<Logs />} />
         <Route path="schedule" element={<Schedule />} />
+        <Route path="analytics" element={<Analytics />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

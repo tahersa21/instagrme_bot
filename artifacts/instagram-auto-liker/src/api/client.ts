@@ -40,14 +40,24 @@ export const auth = {
   isAuthed: () => Boolean(localStorage.getItem(TOKEN_KEY)),
 };
 
+export type ProxyType = 'residential' | 'mobile_4g' | 'datacenter' | null;
+
 export type Account = {
   id: number;
   username: string;
   is_active: boolean;
   has_proxy: boolean;
+  proxy_type: ProxyType;
+  personality: string | null;
   last_login_at: string | null;
   last_error: string | null;
   created_at: string;
+};
+
+export type Personality = {
+  skip_rate: number;       // 0.05 – 0.35
+  session_style: 'active' | 'moderate' | 'quiet';
+  warmup_count: number;    // 1 – 5
 };
 
 export type Target = {
@@ -97,4 +107,16 @@ export type ScheduleSettings = {
   min_delay_seconds: number;
   max_delay_seconds: number;
   warmup_enabled: boolean;
+  active_hours_start: number;
+  active_hours_end: number;
+  new_account_mode: boolean;
+};
+
+export type StatsOverview = {
+  total_7d: number;
+  today_likes: number;
+  success_rate: number;
+  accounts_active: number;
+  by_day: { date: string; likes: number }[];
+  by_account: { username: string; likes: number }[];
 };
