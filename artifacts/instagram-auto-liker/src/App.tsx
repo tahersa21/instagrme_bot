@@ -1,3 +1,4 @@
+import { type ReactElement } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { auth } from './api/client';
 import Layout from './components/Layout';
@@ -9,7 +10,7 @@ import Logs from './pages/Logs';
 import IgLogin from './pages/IgLogin';
 import Analytics from './pages/Analytics';
 
-function RequireAuth({ children }: { children: JSX.Element }) {
+function RequireAuth({ children }: { children: ReactElement }) {
   return auth.isAuthed() ? children : <Navigate to="/login" replace />;
 }
 
