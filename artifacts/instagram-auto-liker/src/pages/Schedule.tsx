@@ -49,14 +49,14 @@ export default function Schedule() {
         <div className="border-t border-slate-800 pt-5">
           <Toggle
             label="التصفح التمهيدي (Warm-up)"
-            description="يتصفح الفيد والاستكشاف وبعض الصفحات بشكل عشوائي قبل البدء بالتفاعل، لتقليل احتمال الكشف من إنستغرام"
+            description="يتصفح الفيد والاستكشاف وبعض الصفحات عشوائياً قبل التفاعل، لتقليل احتمال الكشف"
             checked={form.warmup_enabled}
             onChange={(v) => setForm({ ...form, warmup_enabled: v })}
             color="blue"
           />
           {form.warmup_enabled && (
-            <p className="mt-2 text-xs text-slate-500 mr-14">
-              يختار البوت 2-3 إجراءات عشوائية من: تصفح الفيد ← الاستكشاف ← عرض الملف الشخصي ← الرسائل. المدة ~20-40 ثانية إضافية.
+            <p className="mt-2 text-xs text-slate-500">
+              يختار البوت 2-3 إجراءات عشوائية: تصفح الفيد ← الاستكشاف ← الملف الشخصي ← الرسائل. المدة ~20-40 ثانية.
             </p>
           )}
         </div>
@@ -137,26 +137,32 @@ function Toggle({
   onChange: (v: boolean) => void;
   color?: 'pink' | 'blue';
 }) {
-  const activeColor = color === 'blue' ? 'bg-blue-600' : 'bg-ig-pink';
+  const activeColor = color === 'blue' ? '#2563eb' : '#e1306c';
   return (
-    <label className="flex items-start gap-4 cursor-pointer select-none">
+    <div
+      className="flex items-center justify-between gap-4 cursor-pointer select-none"
+      onClick={() => onChange(!checked)}
+    >
+      {/* Text — appears on the RIGHT in RTL (first child) */}
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium leading-snug">{label}</p>
+        {description && (
+          <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">{description}</p>
+        )}
+      </div>
+
+      {/* Toggle track — appears on the LEFT in RTL (last child), dir=ltr so thumb moves correctly */}
       <div
-        onClick={() => onChange(!checked)}
-        className={`mt-0.5 w-11 h-6 rounded-full transition-colors flex items-center px-1 shrink-0 ${
-          checked ? activeColor : 'bg-slate-700'
-        }`}
+        dir="ltr"
+        className="shrink-0 w-11 h-6 rounded-full flex items-center px-1 transition-colors duration-200"
+        style={{ backgroundColor: checked ? activeColor : '#334155' }}
       >
         <div
-          className={`w-4 h-4 rounded-full bg-white transition-transform ${
-            checked ? 'translate-x-5' : 'translate-x-0'
-          }`}
+          className="w-4 h-4 rounded-full bg-white shadow transition-transform duration-200"
+          style={{ transform: checked ? 'translateX(20px)' : 'translateX(0)' }}
         />
       </div>
-      <div>
-        <p className="text-sm font-medium">{label}</p>
-        {description && <p className="text-xs text-slate-500 mt-0.5">{description}</p>}
-      </div>
-    </label>
+    </div>
   );
 }
 

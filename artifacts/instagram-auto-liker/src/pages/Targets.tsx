@@ -81,12 +81,10 @@ export default function Targets() {
 
       {isLoading && <p className="text-slate-400">جارٍ التحميل...</p>}
 
-      {/* Targets list */}
       <div className="space-y-4">
         {targets.length === 0 && !isLoading && (
           <div className="card text-center py-8 text-slate-400">لا توجد حسابات مستهدفة بعد.</div>
         )}
-
         {targets.map((t) => (
           <TargetCard
             key={t.id}
@@ -103,6 +101,45 @@ export default function Targets() {
   );
 }
 
+/* ── Inline toggle — RTL-safe ────────────────────────────────────────────── */
+function InlineToggle({
+  checked,
+  onChange,
+  label,
+  description,
+  color = 'pink',
+}: {
+  checked: boolean;
+  onChange: () => void;
+  label: string;
+  description?: string;
+  color?: 'pink' | 'blue';
+}) {
+  const activeColor = color === 'blue' ? '#2563eb' : '#e1306c';
+  return (
+    <div
+      className="flex items-center justify-between gap-4 cursor-pointer select-none"
+      onClick={onChange}
+    >
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium">{label}</p>
+        {description && <p className="text-xs text-slate-500 mt-0.5">{description}</p>}
+      </div>
+      <div
+        dir="ltr"
+        className="shrink-0 w-11 h-6 rounded-full flex items-center px-1 transition-colors duration-200"
+        style={{ backgroundColor: checked ? activeColor : '#334155' }}
+      >
+        <div
+          className="w-4 h-4 rounded-full bg-white shadow transition-transform duration-200"
+          style={{ transform: checked ? 'translateX(20px)' : 'translateX(0)' }}
+        />
+      </div>
+    </div>
+  );
+}
+
+/* ── Target card ─────────────────────────────────────────────────────────── */
 function TargetCard({
   target,
   onUpdate,
@@ -115,26 +152,30 @@ function TargetCard({
   isPending: boolean;
 }) {
   const [editingComments, setEditingComments] = useState(false);
-  const [commentsText, setCommentsText] = useState(
-    target.comment_templates.join('\n')
-  );
+  const [commentsText, setCommentsText] = useState(target.comment_templates.join('\n'));
 
   const saveComments = () => {
-    const templates = commentsText
-      .split('\n')
-      .map((s) => s.trim())
-      .filter(Boolean);
+    const templates = commentsText.split('\n').map((s) => s.trim()).filter(Boolean);
     onUpdate({ comment_templates: templates });
     setEditingComments(false);
   };
 
   return (
     <div className="card space-y-4">
-      {/* Header row */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
+      {/* Header */}
+      <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
           <p className="text-lg font-semibold">@{target.username}</p>
           <p className="text-xs text-slate-500">إعجابات لكل تشغيل: {target.likes_per_run}</p>
+          <span
+            className={`inline-block mt-1 px-2 py-0.5 rounded text-xs ${
+              target.is_enabled
+                ? 'bg-green-900/40 text-green-300'
+                : 'bg-slate-800 text-slate-400'
+            }`}
+          >
+            {target.is_enabled ? 'مفعّل' : 'معطّل'}
+          </span>
         </div>
         <div className="flex gap-2 flex-wrap">
           <button
@@ -145,69 +186,28 @@ function TargetCard({
           >
             {target.is_enabled ? 'تعطيل' : 'تفعيل'}
           </button>
-          <button
-            type="button"
-            className="btn-danger text-xs"
-            onClick={onDelete}
-          >
+          <button type="button" className="btn-danger text-xs" onClick={onDelete}>
             حذف
           </button>
         </div>
       </div>
 
-      {/* Status badge */}
-      <span
-        className={`inline-block px-2 py-0.5 rounded text-xs ${
-          target.is_enabled
-            ? 'bg-green-900/40 text-green-300'
-            : 'bg-slate-800 text-slate-400'
-        }`}
-      >
-        {target.is_enabled ? 'مفعّل' : 'معطّل'}
-      </span>
-
       {/* Feature toggles */}
-      <div className="border-t border-slate-800 pt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-
-        {/* Story watch */}
-        <label className="flex items-center gap-3 cursor-pointer select-none">
-          <div
-            onClick={() => onUpdate({ story_watch_enabled: !target.story_watch_enabled })}
-            className={`w-10 h-6 rounded-full transition-colors flex items-center px-1 cursor-pointer ${
-              target.story_watch_enabled ? 'bg-ig-pink' : 'bg-slate-700'
-            }`}
-          >
-            <div
-              className={`w-4 h-4 rounded-full bg-white transition-transform ${
-                target.story_watch_enabled ? 'translate-x-4' : 'translate-x-0'
-              }`}
-            />
-          </div>
-          <div>
-            <p className="text-sm font-medium">مشاهدة الستوري</p>
-            <p className="text-xs text-slate-500">يشاهد الستوري تلقائياً في كل تشغيل</p>
-          </div>
-        </label>
-
-        {/* Comment toggle */}
-        <label className="flex items-center gap-3 cursor-pointer select-none">
-          <div
-            onClick={() => onUpdate({ comment_enabled: !target.comment_enabled })}
-            className={`w-10 h-6 rounded-full transition-colors flex items-center px-1 cursor-pointer ${
-              target.comment_enabled ? 'bg-ig-pink' : 'bg-slate-700'
-            }`}
-          >
-            <div
-              className={`w-4 h-4 rounded-full bg-white transition-transform ${
-                target.comment_enabled ? 'translate-x-4' : 'translate-x-0'
-              }`}
-            />
-          </div>
-          <div>
-            <p className="text-sm font-medium">التعليق التلقائي</p>
-            <p className="text-xs text-slate-500">يعلّق بعشوائية من قائمتك</p>
-          </div>
-        </label>
+      <div className="border-t border-slate-800 pt-4 space-y-3">
+        <InlineToggle
+          checked={target.story_watch_enabled}
+          onChange={() => onUpdate({ story_watch_enabled: !target.story_watch_enabled })}
+          label="مشاهدة الستوري"
+          description="يشاهد الستوري تلقائياً في كل تشغيل"
+          color="pink"
+        />
+        <InlineToggle
+          checked={target.comment_enabled}
+          onChange={() => onUpdate({ comment_enabled: !target.comment_enabled })}
+          label="التعليق التلقائي"
+          description="يعلّق بعشوائية من قائمة التعليقات"
+          color="pink"
+        />
       </div>
 
       {/* Comment templates editor */}
@@ -242,7 +242,7 @@ function TargetCard({
                 onChange={(e) => setCommentsText(e.target.value)}
                 placeholder={'تعليق رائع!\nمنشور جميل 🔥\nاستمر هكذا!'}
               />
-              <p className="text-xs text-slate-500">تعليق واحد في كل سطر. سيُختار واحد عشوائياً.</p>
+              <p className="text-xs text-slate-500">تعليق واحد في كل سطر — يُختار واحد عشوائياً.</p>
               <div className="flex gap-2">
                 <button type="button" className="btn-primary text-sm" onClick={saveComments}>
                   حفظ
