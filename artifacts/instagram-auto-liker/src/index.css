@@ -2,94 +2,171 @@
 
 @theme inline {
   --color-ig-pink: #e1306c;
+  --color-ig-purple: #833ab4;
 }
 
 @layer base {
+  html {
+    direction: rtl;
+  }
+
   body {
-    font-family: system-ui, -apple-system, 'Segoe UI', Tahoma, sans-serif;
+    font-family: 'Segoe UI', Tahoma, system-ui, -apple-system, sans-serif;
     background-color: #020617;
     color: #f1f5f9;
+    min-height: 100vh;
+  }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: #0f172a;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #334155;
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #475569;
+  }
+
+  /* Fix number inputs */
+  input[type="number"]::-webkit-inner-spin-button,
+  input[type="number"]::-webkit-outer-spin-button {
+    opacity: 1;
   }
 }
 
 @layer components {
+  /* ── Buttons ─────────────────────────────────────────── */
   .btn-primary {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    padding: 0.5rem 1rem;
+    gap: 0.4rem;
+    padding: 0.5rem 1.25rem;
     border-radius: 0.5rem;
-    font-weight: 500;
-    transition: opacity 0.15s, background-color 0.15s;
-    background-color: #e1306c;
+    font-weight: 600;
+    font-size: 0.875rem;
+    transition: opacity 0.15s, transform 0.1s;
+    background: linear-gradient(135deg, #e1306c, #c13584);
     color: #fff;
     cursor: pointer;
+    white-space: nowrap;
+    box-shadow: 0 1px 3px rgba(225, 48, 108, 0.3);
   }
   .btn-primary:hover {
     opacity: 0.9;
+    transform: translateY(-1px);
+  }
+  .btn-primary:active {
+    transform: translateY(0);
   }
   .btn-primary:disabled {
-    opacity: 0.5;
+    opacity: 0.45;
+    transform: none;
+    cursor: not-allowed;
   }
 
   .btn-secondary {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    padding: 0.5rem 1rem;
+    gap: 0.4rem;
+    padding: 0.5rem 1.25rem;
     border-radius: 0.5rem;
     font-weight: 500;
-    transition: background-color 0.15s;
+    font-size: 0.875rem;
+    transition: background-color 0.15s, transform 0.1s;
     background-color: #1e293b;
-    color: #f1f5f9;
+    border: 1px solid #334155;
+    color: #cbd5e1;
     cursor: pointer;
+    white-space: nowrap;
   }
   .btn-secondary:hover {
-    background-color: #334155;
+    background-color: #293548;
+    border-color: #475569;
+    color: #f1f5f9;
   }
   .btn-secondary:disabled {
-    opacity: 0.5;
+    opacity: 0.45;
+    cursor: not-allowed;
   }
 
   .btn-danger {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    padding: 0.5rem 1rem;
+    gap: 0.4rem;
+    padding: 0.5rem 1.25rem;
     border-radius: 0.5rem;
     font-weight: 500;
-    transition: background-color 0.15s;
-    background-color: #dc2626;
-    color: #fff;
+    font-size: 0.875rem;
+    transition: background-color 0.15s, transform 0.1s;
+    background-color: #7f1d1d;
+    border: 1px solid #991b1b;
+    color: #fca5a5;
     cursor: pointer;
+    white-space: nowrap;
   }
   .btn-danger:hover {
-    background-color: #b91c1c;
+    background-color: #991b1b;
+    color: #fff;
   }
   .btn-danger:disabled {
-    opacity: 0.5;
+    opacity: 0.45;
+    cursor: not-allowed;
   }
 
+  /* ── Input ───────────────────────────────────────────── */
   .input {
+    display: block;
     width: 100%;
-    padding: 0.5rem 0.75rem;
+    padding: 0.55rem 0.85rem;
     border-radius: 0.5rem;
-    background-color: #0f172a;
-    border: 1px solid #334155;
+    background-color: #0a1120;
+    border: 1px solid #1e293b;
     color: #f1f5f9;
+    font-size: 0.9rem;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .input::placeholder {
+    color: #475569;
   }
   .input:focus {
     outline: none;
     border-color: #e1306c;
+    box-shadow: 0 0 0 3px rgba(225, 48, 108, 0.15);
+  }
+  .input:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
 
+  /* Textarea inherits input styles */
+  textarea.input {
+    resize: vertical;
+    min-height: 80px;
+    line-height: 1.5;
+  }
+
+  /* ── Card ────────────────────────────────────────────── */
   .card {
-    background-color: #0f172a;
+    background-color: #0d1829;
     border: 1px solid #1e293b;
-    border-radius: 0.75rem;
+    border-radius: 0.875rem;
     padding: 1.5rem;
+    transition: border-color 0.2s;
+  }
+  .card:hover {
+    border-color: #263348;
   }
 
+  /* ── Badges ──────────────────────────────────────────── */
   .text-ig-pink {
     color: #e1306c;
   }
