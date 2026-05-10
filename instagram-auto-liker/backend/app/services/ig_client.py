@@ -1,18 +1,25 @@
 """Thin wrapper around `instagrapi` to abstract login + media fetching.
 
-We persist the session JSON (cookies + device) encrypted in the DB so we don't
-re-authenticate every run — this is safer for the account.
+Anti-detection layer
+────────────────────
+- Each account gets a **stable unique Android device fingerprint** stored inside
+  the encrypted session (device_id, uuid, phone_id, ad_id, build_id, etc.).
+  instagrapi generates this automatically on first login and re-uses it on
+  restore_client() so Instagram always "sees" the same phone.
 
-Proxy support: each Account may store an encrypted proxy URL
-(http://user:pass@host:port  or  socks5://user:pass@host:port).
-The proxy is applied to every Client created for that account.
+- An optional per-account **proxy** (http/socks5) is applied to every Client
+  instance, ensuring each account appears from a different IP.
+
+- The internal `cl.delay_range` adds small jitter to every private API call.
 """
 
 from __future__ import annotations
 
 import json
 import logging
+import random
 from typing import Any
+from urllib.parse import urlparse, urlunparse
 
 import requests as _requests
 
@@ -51,9 +58,16 @@ class IGRateLimited(IGClientError):
     pass
 
 
+# ─── client factory ───────────────────────────────────────────────────────────
+
 def _new_client(proxy: str | None = None) -> Client:
+    """Create a fresh instagrapi Client with optional proxy and realistic jitter."""
     cl = Client()
-    cl.delay_range = [1, 3]
+    # Randomise the internal API call delay (0.5 – 2.5 s) to avoid clockwork patterns
+    cl.delay_range = [
+        round(random.uniform(0.5, 1.5), 2),
+        round(random.uniform(1.5, 2.5), 2),
+    ]
     if proxy:
         try:
             cl.set_proxy(proxy)
@@ -64,15 +78,16 @@ def _new_client(proxy: str | None = None) -> Client:
 
 
 def _mask_proxy(proxy: str) -> str:
-    """Return a safe-to-log representation with credentials hidden."""
+    """Return a credential-free proxy string safe for logging."""
     try:
-        from urllib.parse import urlparse, urlunparse
         p = urlparse(proxy)
         masked = p._replace(netloc=f"***:***@{p.hostname}:{p.port}")
         return urlunparse(masked)
     except Exception:
         return "***"
 
+
+# ─── login helpers ────────────────────────────────────────────────────────────
 
 def login_with_password(
     username: str,
@@ -140,7 +155,7 @@ def login_with_cookies(
 
 
 def restore_client(account: Account) -> Client:
-    """Rebuild a Client from the encrypted session stored on `account`."""
+    """Rebuild a Client from the encrypted session (+ optional proxy) on `account`."""
     if not account.encrypted_session:
         raise IGClientError(f"No saved session for account {account.username}")
 
@@ -153,6 +168,7 @@ def restore_client(account: Account) -> Client:
 
     settings_dict = json.loads(crypto.decrypt(account.encrypted_session))
     cl = _new_client(proxy)
+    # Restore the same device fingerprint that was created at first login
     cl.set_settings(settings_dict)
     cl.username = account.username
     return cl

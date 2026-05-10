@@ -1,17 +1,24 @@
-"""Core automation job: warm-up browsing, likes, comments, and story views.
+"""Core automation job — human-behaviour simulation layer.
 
-Flow per run:
-  1. Optional warm-up: scroll feed + explore to mimic human behaviour.
-  2. For each enabled target:
-       a. Watch stories (if enabled).
-       b. Like latest posts (with jitter delays).
-       c. Comment on liked post (if enabled, random template).
+Anti-detection techniques applied
+──────────────────────────────────
+1.  Gaussian timing        — delays follow a bell-curve, not a suspicious flat range.
+2.  Fatigue factor         — every N actions the bot slows down, like a real person.
+3.  Skip probability       — randomly skips ~15 % of posts (humans don't like everything).
+4.  Target shuffle         — processes targets in a different order each run.
+5.  Profile visit          — views the target's profile before engaging (scrolls medias).
+6.  Warm-up browsing       — feed / explore / inbox / own-profile before any action.
+7.  Story watch            — per-target optional story viewing.
+8.  Random comment         — per-target optional comment from a pool of templates.
+9.  Proxy per account      — already applied in ig_client.restore_client().
+10. Unique device          — instagrapi session stores a stable random Android fingerprint.
 """
 
 from __future__ import annotations
 
 import json
 import logging
+import math
 import random
 import time
 from datetime import datetime, timedelta
@@ -21,12 +28,35 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..config import get_settings
-from ..models import Account, LikeLog, Run, RunStatus, Target, SettingsKV
+from ..models import Account, LikeLog, Run, RunStatus, SettingsKV, Target
 from . import ig_client
 
 logger = logging.getLogger(__name__)
 
-# ─── helpers ──────────────────────────────────────────────────────────────────
+
+# ─── timing helpers ───────────────────────────────────────────────────────────
+
+def _gauss_sleep(mean: float, sigma_frac: float = 0.3, mn: float = 3.0) -> None:
+    """Sleep for a Gaussian-distributed duration around `mean` seconds.
+
+    sigma_frac  — std-dev as fraction of mean (default 30 %)
+    mn          — hard floor in seconds
+    """
+    sigma = mean * sigma_frac
+    duration = max(mn, random.gauss(mean, sigma))
+    logger.debug("Sleeping %.1fs", duration)
+    time.sleep(duration)
+
+
+def _fatigue_sleep(actions_done: int, base_mean: float) -> None:
+    """Add an extra pause every 10 actions to simulate human fatigue."""
+    if actions_done > 0 and actions_done % 10 == 0:
+        pause = random.gauss(45, 10)
+        logger.info("Fatigue pause after %d actions — %.0fs", actions_done, pause)
+        time.sleep(max(20, pause))
+
+
+# ─── db helpers ───────────────────────────────────────────────────────────────
 
 def _count_likes_since(db: Session, account_id: int, since: datetime) -> int:
     stmt = select(func.count(LikeLog.id)).where(
@@ -61,48 +91,40 @@ def _db_flag(db: Session, key: str, default: bool = True) -> bool:
 # ─── warm-up browsing ─────────────────────────────────────────────────────────
 
 def _warmup_browse(client: object) -> None:  # type: ignore[type-arg]
-    """Simulate a short human-like browsing session before doing any actions."""
-    logger.info("Starting warm-up browsing session")
+    """Simulate a short human-like browsing session before any real actions."""
+    logger.info("Starting warm-up browsing")
 
-    actions: list[tuple[str, object]] = []  # (label, callable)
-
-    # 1. Scroll the main timeline feed
     def _browse_timeline() -> None:
         try:
-            feed = client.get_timeline_feed()  # type: ignore[attr-defined]
-            items = feed.get("feed_items", []) if isinstance(feed, dict) else []
-            count = min(len(items), random.randint(3, 7))
-            logger.info("Warm-up: scrolled %d timeline posts", count)
-            time.sleep(random.uniform(4, 9))
+            client.get_timeline_feed()  # type: ignore[attr-defined]
+            logger.info("Warm-up: scrolled timeline")
+            _gauss_sleep(6, mn=4)
         except Exception as exc:
-            logger.debug("Warm-up timeline browse skipped: %s", exc)
+            logger.debug("Warm-up timeline skipped: %s", exc)
 
-    # 2. Peek at the explore / suggested feed
     def _browse_explore() -> None:
         try:
             client.explore()  # type: ignore[attr-defined]
-            logger.info("Warm-up: browsed explore page")
-            time.sleep(random.uniform(3, 7))
+            logger.info("Warm-up: browsed explore")
+            _gauss_sleep(5, mn=3)
         except Exception as exc:
-            logger.debug("Warm-up explore browse skipped: %s", exc)
+            logger.debug("Warm-up explore skipped: %s", exc)
 
-    # 3. View own profile briefly
     def _view_own_profile() -> None:
         try:
             client.account_info()  # type: ignore[attr-defined]
             logger.info("Warm-up: viewed own profile")
-            time.sleep(random.uniform(2, 5))
+            _gauss_sleep(3, mn=2)
         except Exception as exc:
             logger.debug("Warm-up profile view skipped: %s", exc)
 
-    # 4. View notifications (inbox) briefly
     def _check_inbox() -> None:
         try:
             client.direct_threads()  # type: ignore[attr-defined]
             logger.info("Warm-up: checked inbox")
-            time.sleep(random.uniform(2, 4))
+            _gauss_sleep(3, mn=2)
         except Exception as exc:
-            logger.debug("Warm-up inbox check skipped: %s", exc)
+            logger.debug("Warm-up inbox skipped: %s", exc)
 
     actions = [
         ("timeline", _browse_timeline),
@@ -110,16 +132,28 @@ def _warmup_browse(client: object) -> None:  # type: ignore[type-arg]
         ("profile", _view_own_profile),
         ("inbox", _check_inbox),
     ]
-
-    # Shuffle and run 2-3 random warm-up actions
     random.shuffle(actions)
-    chosen = actions[: random.randint(2, 3)]
-    for label, fn in chosen:
-        logger.info("Warm-up action: %s", label)
+    for label, fn in actions[: random.randint(2, 3)]:
+        logger.info("Warm-up: %s", label)
         fn()
-        time.sleep(random.uniform(1, 3))
+        _gauss_sleep(2, mn=1)
 
-    logger.info("Warm-up complete — proceeding to main actions")
+    logger.info("Warm-up complete")
+
+
+# ─── profile visit simulation ─────────────────────────────────────────────────
+
+def _visit_profile(client: object, user_id: str | int, username: str) -> None:
+    """Simulate opening and scrolling through a target's profile page."""
+    try:
+        client.user_info(user_id)  # type: ignore[attr-defined]
+        logger.info("Visited profile of @%s", username)
+        _gauss_sleep(4, mn=2)   # reading profile bio
+        # Simulate scrolling a little through their grid
+        client.user_medias(user_id, amount=random.randint(3, 6))  # type: ignore[attr-defined]
+        _gauss_sleep(5, mn=3)   # scrolling grid
+    except Exception as exc:
+        logger.debug("Profile visit skipped for @%s: %s", username, exc)
 
 
 # ─── main job ─────────────────────────────────────────────────────────────────
@@ -140,6 +174,9 @@ def run_like_job(
     min_delay = min_delay or settings.default_min_delay_seconds
     max_delay = max_delay or settings.default_max_delay_seconds
 
+    # Mean delay between actions — used for Gaussian timing
+    delay_mean = (min_delay + max_delay) / 2
+
     run = Run(account_id=account.id, status=RunStatus.RUNNING, triggered_by=triggered_by)
     db.add(run)
     db.commit()
@@ -155,12 +192,12 @@ def run_like_job(
         db.commit()
         return run
 
-    # ── Warm-up browsing ─────────────────────────────────────────────────────
+    # ── 1. Warm-up ────────────────────────────────────────────────────────────
     if _db_flag(db, "warmup_enabled", default=True):
         try:
             _warmup_browse(client)
         except Exception as exc:
-            logger.warning("Warm-up phase encountered an error: %s", exc)
+            logger.warning("Warm-up error: %s", exc)
 
     targets = list(
         db.scalars(
@@ -174,13 +211,17 @@ def run_like_job(
         db.commit()
         return run
 
+    # ── 2. Shuffle targets each run (avoid predictable order) ─────────────────
+    random.shuffle(targets)
+
     now = datetime.utcnow()
     likes_today = _count_likes_since(db, account.id, now - timedelta(days=1))
     likes_hour = _count_likes_since(db, account.id, now - timedelta(hours=1))
+    total_actions = 0  # for fatigue tracking
 
     for target in targets:
         if likes_today >= daily_limit:
-            logger.info("Daily like limit reached (%s); stopping run", daily_limit)
+            logger.info("Daily limit reached (%s)", daily_limit)
             break
 
         try:
@@ -191,20 +232,27 @@ def run_like_job(
             db.commit()
             continue
 
-        # ── Stories ──────────────────────────────────────────────────────────
+        # ── 3. Stories ────────────────────────────────────────────────────────
         if target.story_watch_enabled:
             try:
                 stories = client.user_stories(user_id)
                 if stories:
                     client.story_seen([s.pk for s in stories])
                     logger.info("Watched %d stories for @%s", len(stories), target.username)
-                    time.sleep(random.uniform(2, 5))
+                    _gauss_sleep(4, mn=2)
             except Exception as exc:
                 logger.warning("Story watch failed for @%s: %s", target.username, exc)
 
-        # ── Media fetch ───────────────────────────────────────────────────────
+        # ── 4. Profile visit before engaging ──────────────────────────────────
+        _visit_profile(client, user_id, target.username)
+
+        # ── 5. Fetch media ────────────────────────────────────────────────────
         try:
-            medias = client.user_medias(user_id, amount=target.likes_per_run)
+            # Fetch a few extra so we have room to skip some naturally
+            fetch_amount = min(target.likes_per_run + random.randint(1, 3), 20)
+            medias = client.user_medias(user_id, amount=fetch_amount)
+            # Shuffle media order — real users don't always start from the newest
+            random.shuffle(medias)
         except LoginRequired as exc:
             run.status = RunStatus.FAILED
             run.error = f"Login required mid-run: {exc}"
@@ -230,68 +278,77 @@ def run_like_job(
             except Exception:
                 templates = []
 
+        liked_this_target = 0
+
         for media in medias:
+            # Stop if we've liked enough posts for this target
+            if liked_this_target >= target.likes_per_run:
+                break
+
             run.likes_attempted += 1
+
+            # ── 6. Skip probability (~15 %) — humans don't like everything ───
+            if random.random() < 0.15:
+                logger.debug("Randomly skipping post %s (human behaviour)", media.id)
+                run.likes_skipped += 1
+                db.add(LikeLog(
+                    run_id=run.id, account_id=account.id,
+                    target_username=target.username, media_id=str(media.id),
+                    success=False, skipped_reason="random_skip",
+                ))
+                db.commit()
+                # Short pause as if viewing but not liking
+                _gauss_sleep(random.uniform(2, 5), mn=1)
+                continue
 
             if _already_liked(db, account.id, str(media.id)):
                 run.likes_skipped += 1
-                db.add(
-                    LikeLog(
-                        run_id=run.id,
-                        account_id=account.id,
-                        target_username=target.username,
-                        media_id=str(media.id),
-                        success=False,
-                        skipped_reason="already_liked",
-                    )
-                )
+                db.add(LikeLog(
+                    run_id=run.id, account_id=account.id,
+                    target_username=target.username, media_id=str(media.id),
+                    success=False, skipped_reason="already_liked",
+                ))
                 db.commit()
                 continue
 
             if likes_today >= daily_limit or likes_hour >= hourly_limit:
                 run.likes_skipped += 1
-                db.add(
-                    LikeLog(
-                        run_id=run.id,
-                        account_id=account.id,
-                        target_username=target.username,
-                        media_id=str(media.id),
-                        success=False,
-                        skipped_reason="rate_limit",
-                    )
-                )
+                db.add(LikeLog(
+                    run_id=run.id, account_id=account.id,
+                    target_username=target.username, media_id=str(media.id),
+                    success=False, skipped_reason="rate_limit",
+                ))
                 db.commit()
                 break
 
+            # ── 7. Like ───────────────────────────────────────────────────────
             try:
+                # Simulate reading/viewing the post before liking
+                _gauss_sleep(random.uniform(2, 6), sigma_frac=0.2, mn=1)
+
                 client.media_like(media.id)
                 run.likes_succeeded += 1
+                liked_this_target += 1
                 likes_today += 1
                 likes_hour += 1
+                total_actions += 1
+
                 media_url = f"https://www.instagram.com/p/{media.code}/" if media.code else None
-                db.add(
-                    LikeLog(
-                        run_id=run.id,
-                        account_id=account.id,
-                        target_username=target.username,
-                        media_id=str(media.id),
-                        media_url=media_url,
-                        success=True,
-                    )
-                )
+                db.add(LikeLog(
+                    run_id=run.id, account_id=account.id,
+                    target_username=target.username, media_id=str(media.id),
+                    media_url=media_url, success=True,
+                ))
                 db.commit()
 
-                # ── Comment after successful like ─────────────────────────
+                # ── 8. Comment after like ─────────────────────────────────────
                 if target.comment_enabled and templates:
                     comment_text = _pick_comment(templates)
                     if comment_text:
                         try:
-                            time.sleep(random.uniform(3, 8))
+                            _gauss_sleep(random.uniform(4, 10), mn=3)
                             client.media_comment(media.id, comment_text)
-                            logger.info(
-                                "Commented on %s for @%s: %s",
-                                media.id, target.username, comment_text,
-                            )
+                            logger.info("Commented on %s: %s", media.id, comment_text)
                         except Exception as exc:
                             logger.warning("Comment failed on %s: %s", media.id, exc)
 
@@ -302,21 +359,21 @@ def run_like_job(
                 return run
             except ClientError as exc:
                 run.likes_failed += 1
-                db.add(
-                    LikeLog(
-                        run_id=run.id,
-                        account_id=account.id,
-                        target_username=target.username,
-                        media_id=str(media.id),
-                        success=False,
-                        error=str(exc),
-                    )
-                )
+                db.add(LikeLog(
+                    run_id=run.id, account_id=account.id,
+                    target_username=target.username, media_id=str(media.id),
+                    success=False, error=str(exc),
+                ))
                 db.commit()
 
-            sleep_for = random.uniform(min_delay, max_delay)
-            logger.info("Sleeping %.1fs after action", sleep_for)
-            time.sleep(sleep_for)
+            # ── 9. Gaussian delay between actions ─────────────────────────────
+            _gauss_sleep(delay_mean)
+
+            # ── 10. Fatigue pause every 10 actions ────────────────────────────
+            _fatigue_sleep(total_actions, delay_mean)
+
+        # Small pause between targets (like switching to a different profile)
+        _gauss_sleep(random.uniform(5, 15), mn=4)
 
     run.status = RunStatus.COMPLETED
     run.finished_at = datetime.utcnow()
