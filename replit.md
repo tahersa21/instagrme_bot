@@ -120,7 +120,7 @@ instagram-auto-liker/backend/app/
 
 ## قرارات معمارية
 
-- **Playwright على Replit/NixOS**: يستخدم Chromium من nix-store، لأن `headless-shell` المدمج مع Playwright ينقصه `libnspr4.so`. يمكن تجاوز المسار عبر `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH`.
+- **Playwright على Replit**: البيئة Ubuntu 24.04 وليس NixOS. Chrome for Testing يحتاج ~25 مكتبة نظام (glib، nspr، nss، atk، cups...) تُثبَّت عبر Nix (`installSystemDependencies`). `apt-get` محجوب في Replit. `ensure_chromium_installed()` تُشغَّل بشكل متزامن عند startup وتتحقق بـ `ldd` أن جميع المكتبات محلولة. يمكن تجاوز المسار عبر `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH`.
 - **تشفير ثنائي المستوى**: كلمات المرور + ملفات الجلسة + مفاتيح TOTP + البروكسي — كلها مشفرة بـ Fernet قبل التخزين.
 - **APScheduler داخل FastAPI**: يعمل الجدولة في نفس العملية، يبدأ عند `startup` وينتهي عند `shutdown`.
 - **auth endpoint**: يستخدم `OAuth2PasswordRequestForm` → يجب إرسال البيانات كـ `application/x-www-form-urlencoded` وليس JSON.

@@ -4,6 +4,36 @@
 
 ---
 
+## [0.6.0] — إصلاح Playwright على Replit (مكتبات النظام)
+
+### مُصلح
+- **خطأ `libnspr4.so: No such file or directory`**: كانت Chrome for Testing تفشل عند التشغيل لأن ~25 مكتبة نظام (glib، nspr، nss، atk، cups، dbus، xkbcommon، alsa، gbm، X11، cairo، pango...) غائبة.
+- **الحل**: تثبيت جميع المكتبات المطلوبة عبر Nix (`installSystemDependencies`) بدلاً من `apt-get` المحجوب في Replit.
+- **`_chromium_can_run()`** دالة جديدة تتحقق بـ `ldd` أن جميع shared libs محلولة — لا مجرد وجود الملف.
+- **`ensure_chromium_installed()`** محسّنة: تُجرب `install-deps` أولاً (تعمل على Ubuntu حقيقي)، ثم تتراجع gracefully، ثم تُعيد تنزيل الـ browser فقط إذا أثبت `ldd` وجود مكتبات ناقصة.
+
+### مُصلح (سابق — v0.5)
+- **خطأ `ETXTBSY`**: race condition بين تثبيت Chromium في الخلفية وطلب login وارد في نفس الوقت.
+- **الحل**: تشغيل `ensure_chromium_installed()` بشكل متزامن قبل قبول أي طلب.
+
+---
+
+## [0.5.0] — إعادة تنشيط الحسابات الموقوفة
+
+### مضاف
+- **`PATCH /api/accounts/{id}/reactivate`** — endpoint جديد يُعيد تنشيط حساب موقوف:
+  - يستدعي `ig_client.relogin_account()` باستخدام كلمة المرور المخزنة + TOTP
+  - يُحدِّث `is_active=True` عند النجاح
+  - يُرسل HTTP 400 مع رسالة عربية واضحة عند الفشل
+  - محمي بـ `get_current_user`
+
+- **زر "إعادة التنشيط"** في Dashboard.tsx:
+  - يظهر فقط عندما `is_active === false`
+  - يُظهر نص "جارٍ التنشيط..." أثناء الطلب
+  - رسالة خطأ حمراء منفصلة عن `last_error`
+
+---
+
 ## [0.4.0] — 2FA TOTP تلقائي
 
 ### مضاف
