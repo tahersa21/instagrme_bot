@@ -289,12 +289,21 @@ def run_like_job(
     try:
         client = ig_client.restore_client(account)
     except Exception as exc:
-        run.status = RunStatus.FAILED
-        run.finished_at = datetime.utcnow()
-        run.error = f"Failed to restore session: {exc}"
-        account.last_error = str(exc)
-        db.commit()
-        return run
+        logger.warning(
+            "Session restore failed for @%s — attempting auto-relogin: %s",
+            account.username, exc,
+        )
+        try:
+            client = ig_client.relogin_account(account, db)
+            run.error = "تم تجديد الجلسة تلقائياً (جلسة سابقة منتهية)"
+            db.commit()
+        except Exception as relogin_exc:
+            run.status = RunStatus.FAILED
+            run.finished_at = datetime.utcnow()
+            run.error = f"فشل استعادة الجلسة وفشل التجديد التلقائي: {relogin_exc}"
+            account.last_error = str(relogin_exc)
+            db.commit()
+            return run
 
     # ── 1. Warm-up ────────────────────────────────────────────────────────────
     if _db_flag(db, "warmup_enabled", default=True):
@@ -323,6 +332,38 @@ def run_like_job(
     likes_hour = _count_likes_since(db, account.id, now - timedelta(hours=1))
     total_actions = 0
 
+    # Guard: attempt auto-relogin at most once per run to avoid loops
+    _session_refreshed_this_run: bool = False
+
+    def _handle_login_required(exc: Exception) -> "Client | None":
+        """Try auto-relogin once per run. Returns new client or None."""
+        nonlocal _session_refreshed_this_run
+        if _session_refreshed_this_run:
+            logger.warning(
+                "LoginRequired again after already relogging for @%s — giving up",
+                account.username,
+            )
+            return None
+        logger.info(
+            "LoginRequired mid-run for @%s — attempting auto-relogin: %s",
+            account.username, exc,
+        )
+        try:
+            new_client = ig_client.relogin_account(account, db)
+            _session_refreshed_this_run = True
+            existing = run.error or ""
+            run.error = (existing + " | تم تجديد الجلسة تلقائياً أثناء التشغيل").lstrip(" | ")
+            db.commit()
+            return new_client
+        except Exception as relogin_exc:
+            logger.error(
+                "Auto-relogin failed for @%s: %s", account.username, relogin_exc
+            )
+            account.last_error = f"فشل تجديد الجلسة تلقائياً: {relogin_exc}"
+            account.is_active = False
+            db.commit()
+            return None
+
     for idx, target in enumerate(targets):
         if likes_today >= daily_limit:
             logger.info("Daily limit reached (%s)", daily_limit)
@@ -338,7 +379,22 @@ def run_like_job(
 
         try:
             user_id = client.user_id_from_username(target.username)
-        except (LoginRequired, PleaseWaitFewMinutes, ClientError) as exc:
+        except LoginRequired as exc:
+            new_client = _handle_login_required(exc)
+            if new_client is None:
+                run.status = RunStatus.FAILED
+                run.finished_at = datetime.utcnow()
+                run.error = (run.error or "") + f" | انتهت الجلسة ولم يتم تجديدها: {exc}"
+                db.commit()
+                return run
+            client = new_client
+            try:
+                user_id = client.user_id_from_username(target.username)
+            except Exception:
+                run.likes_failed += 1
+                db.commit()
+                continue
+        except (PleaseWaitFewMinutes, ClientError) as exc:
             logger.warning("Could not resolve user_id for %s: %s", target.username, exc)
             run.likes_failed += 1
             db.commit()
@@ -376,12 +432,21 @@ def run_like_job(
             medias = client.user_medias(user_id, amount=fetch_amount)
             random.shuffle(medias)
         except LoginRequired as exc:
-            run.status = RunStatus.FAILED
-            run.error = f"Login required mid-run: {exc}"
-            account.last_error = str(exc)
-            account.is_active = False
-            db.commit()
-            return run
+            new_client = _handle_login_required(exc)
+            if new_client is None:
+                run.status = RunStatus.FAILED
+                run.finished_at = datetime.utcnow()
+                run.error = (run.error or "") + f" | انتهت الجلسة أثناء جلب المنشورات: {exc}"
+                db.commit()
+                return run
+            client = new_client
+            try:
+                medias = client.user_medias(user_id, amount=fetch_amount)
+                random.shuffle(medias)
+            except Exception:
+                run.likes_failed += 1
+                db.commit()
+                continue
         except PleaseWaitFewMinutes as exc:
             run.status = RunStatus.STOPPED
             run.error = f"Rate-limited by Instagram: {exc}"
@@ -471,6 +536,22 @@ def run_like_job(
                         except Exception as exc:
                             logger.warning("Comment failed on %s: %s", media.id, exc)
 
+            except LoginRequired as exc:
+                new_client = _handle_login_required(exc)
+                if new_client is None:
+                    run.status = RunStatus.FAILED
+                    run.finished_at = datetime.utcnow()
+                    run.error = (run.error or "") + f" | انتهت الجلسة أثناء الإعجاب: {exc}"
+                    db.commit()
+                    return run
+                client = new_client
+                run.likes_failed += 1
+                db.add(LikeLog(
+                    run_id=run.id, account_id=account.id,
+                    target_username=target.username, media_id=str(media.id),
+                    success=False, error="session_expired_relogined",
+                ))
+                db.commit()
             except PleaseWaitFewMinutes as exc:
                 run.status = RunStatus.STOPPED
                 run.error = f"Rate-limited by Instagram: {exc}"

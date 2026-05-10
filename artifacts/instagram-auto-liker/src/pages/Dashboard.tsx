@@ -154,10 +154,31 @@ function AccountCard({
                 حساب جديد ({ageDays} يوم)
               </span>
             )}
+
+            {/* Auto-renewal badge — shown when session was renewed in the last 7 days */}
+            {acc.session_renewed_at && (() => {
+              const renewedDaysAgo = (Date.now() - new Date(acc.session_renewed_at).getTime()) / 86_400_000;
+              if (renewedDaysAgo > 7) return null;
+              const renewedStr = new Date(acc.session_renewed_at).toLocaleString('ar');
+              return (
+                <span
+                  title={`جُدِّدت الجلسة تلقائياً: ${renewedStr}`}
+                  className="px-2 py-0.5 rounded text-xs bg-teal-900/40 text-teal-300 cursor-default"
+                >
+                  جُدِّدت الجلسة تلقائياً
+                </span>
+              );
+            })()}
           </div>
           <p className="text-xs text-slate-500 mt-0.5">
             آخر دخول:{' '}
             {acc.last_login_at ? new Date(acc.last_login_at).toLocaleString('ar') : '—'}
+            {acc.session_renewed_at && (
+              <span className="mr-3 text-teal-400">
+                · آخر تجديد تلقائي:{' '}
+                {new Date(acc.session_renewed_at).toLocaleString('ar')}
+              </span>
+            )}
           </p>
           {acc.last_error && (
             <p className="text-xs text-red-400 mt-1">خطأ: {acc.last_error}</p>

@@ -52,6 +52,7 @@ export type Account = {
   personality: string | null;
   last_login_at: string | null;
   last_error: string | null;
+  session_renewed_at: string | null;
   created_at: string;
 };
 

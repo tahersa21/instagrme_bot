@@ -46,6 +46,7 @@ export type Account = {
   is_active: boolean;
   last_login_at: string | null;
   last_error: string | null;
+  session_renewed_at: string | null;
   created_at: string;
 };
 

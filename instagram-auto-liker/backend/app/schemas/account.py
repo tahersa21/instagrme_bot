@@ -15,6 +15,7 @@ class AccountOut(BaseModel):
     personality: str | None = None
     last_login_at: datetime | None = None
     last_error: str | None = None
+    session_renewed_at: datetime | None = None
     created_at: datetime
 
     @classmethod

@@ -54,18 +54,34 @@ export default function Dashboard() {
                 آخر دخول:{' '}
                 {acc.last_login_at ? new Date(acc.last_login_at).toLocaleString('ar') : '—'}
               </p>
+              {acc.session_renewed_at && (
+                <p className="text-xs text-teal-400 mt-0.5">
+                  آخر تجديد تلقائي:{' '}
+                  {new Date(acc.session_renewed_at).toLocaleString('ar')}
+                </p>
+              )}
               {acc.last_error && (
                 <p className="text-xs text-red-400 mt-1">خطأ: {acc.last_error}</p>
               )}
-              <span
-                className={`inline-block mt-2 px-2 py-0.5 rounded text-xs ${
-                  acc.is_active
-                    ? 'bg-green-900/40 text-green-300'
-                    : 'bg-red-900/40 text-red-300'
-                }`}
-              >
-                {acc.is_active ? 'نشط' : 'غير نشط'}
-              </span>
+              <div className="flex gap-1 flex-wrap mt-2">
+                <span
+                  className={`inline-block px-2 py-0.5 rounded text-xs ${
+                    acc.is_active
+                      ? 'bg-green-900/40 text-green-300'
+                      : 'bg-red-900/40 text-red-300'
+                  }`}
+                >
+                  {acc.is_active ? 'نشط' : 'غير نشط'}
+                </span>
+                {acc.session_renewed_at && (() => {
+                  const days = (Date.now() - new Date(acc.session_renewed_at).getTime()) / 86_400_000;
+                  return days <= 7 ? (
+                    <span className="inline-block px-2 py-0.5 rounded text-xs bg-teal-900/40 text-teal-300">
+                      جُدِّدت الجلسة تلقائياً
+                    </span>
+                  ) : null;
+                })()}
+              </div>
             </div>
             <div className="flex gap-2">
               <Link to={`/accounts/${acc.id}/targets`} className="btn-secondary text-sm">

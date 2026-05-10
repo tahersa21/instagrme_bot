@@ -210,3 +210,75 @@ def login_with_playwright_session(
 
 def session_to_encrypted_blob(settings_dict: dict[str, Any]) -> str:
     return crypto.encrypt(json.dumps(settings_dict))
+
+
+# ─── automatic re-login ───────────────────────────────────────────────────────
+
+def relogin_account(account: "Account", db: "Any") -> Client:
+    """Attempt automatic re-login using the stored encrypted password + TOTP.
+
+    On success the function:
+    - Updates ``account.encrypted_session`` with the fresh session blob.
+    - Sets ``account.last_login_at`` and ``account.session_renewed_at`` to now.
+    - Marks ``account.is_active = True`` and clears ``account.last_error``.
+    - Commits the changes to *db*.
+
+    Returns the freshly authenticated :class:`Client`.
+
+    Raises:
+        IGClientError: When no password is stored, or when the login attempt
+            fails (bad password, challenge, rate-limit, …).
+    """
+    from datetime import datetime as _dt
+
+    if not account.encrypted_password:
+        raise IGClientError(
+            f"لا يوجد كلمة مرور مخزنة للحساب @{account.username} — "
+            "يتعذر التجديد التلقائي. أعد ربط الحساب بكلمة المرور."
+        )
+
+    try:
+        password = crypto.decrypt(account.encrypted_password)
+    except Exception as exc:
+        raise IGClientError(f"فشل فكّ تشفير كلمة المرور: {exc}") from exc
+
+    totp_code: str | None = None
+    if account.encrypted_totp_secret:
+        try:
+            from . import totp as _totp
+            secret = crypto.decrypt(account.encrypted_totp_secret)
+            totp_code = _totp.generate_code(secret)
+            logger.debug("Generated TOTP code for auto-relogin of @%s", account.username)
+        except Exception as exc:
+            logger.warning(
+                "Could not generate TOTP for @%s during auto-relogin: %s",
+                account.username, exc,
+            )
+
+    proxy: str | None = None
+    if account.encrypted_proxy:
+        try:
+            proxy = crypto.decrypt(account.encrypted_proxy)
+        except Exception as exc:
+            logger.warning(
+                "Could not decrypt proxy for @%s during auto-relogin: %s",
+                account.username, exc,
+            )
+
+    logger.info("Auto-relogin: signing in @%s …", account.username)
+    cl, settings = login_with_password(
+        account.username,
+        password,
+        verification_code=totp_code,
+        proxy=proxy,
+    )
+
+    account.encrypted_session = session_to_encrypted_blob(settings)
+    account.last_login_at = _dt.utcnow()
+    account.session_renewed_at = _dt.utcnow()
+    account.is_active = True
+    account.last_error = None
+    db.commit()
+
+    logger.info("Auto-relogin successful for @%s", account.username)
+    return cl
