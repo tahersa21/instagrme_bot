@@ -20,10 +20,11 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(na
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    import asyncio
     init_db()
-    # Install Playwright Chromium in background — non-blocking for fast startup
-    asyncio.get_event_loop().run_in_executor(None, ensure_chromium_installed)
+    # Install Playwright Chromium synchronously before accepting requests.
+    # This prevents ETXTBSY race conditions where a login request arrives
+    # while the binary is still being written by the installer.
+    ensure_chromium_installed()
     scheduler.start_scheduler()
     yield
     scheduler.stop_scheduler()
