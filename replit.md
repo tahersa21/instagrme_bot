@@ -50,6 +50,8 @@ _Populate as you build — explicit user instructions worth remembering across s
 - `MASTER_KEY` and `JWT_SECRET` must stay stable — changing them invalidates all stored encrypted sessions.
 - `DATABASE_URL` is taken from the Replit environment (PostgreSQL); SQLite is NOT used despite the .env default.
 - Tailwind v4 in use — cannot use `@apply` with custom component class names (e.g. `.btn`). Define styles with plain CSS properties instead.
+- `/api/auth/login` uses OAuth2PasswordRequestForm — send as `application/x-www-form-urlencoded` (form data), NOT JSON.
+- Playwright on Replit/NixOS: must use the nix-store Chromium at `/nix/store/0n9rl5l9syy808xi9bk4f6dhnfrvhkww-playwright-browsers-chromium/chromium-1080/chrome-linux/chrome`. The bundled headless-shell binary is missing `libnspr4.so`. On a real VPS (Ubuntu/Debian), `playwright install chromium` installs system deps automatically and works without this workaround. Override via `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` env var.
 
 ## Pointers
 

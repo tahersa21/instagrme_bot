@@ -15,11 +15,13 @@ from ..schemas.account import (
     AccountOut,
     IGLoginCookiesRequest,
     IGLoginPasswordRequest,
+    IGLoginPlaywrightRequest,
     IGLoginResponse,
     PersonalityUpdateRequest,
     ProxyUpdateRequest,
 )
 from ..services import ig_client
+from ..services import pw_login as _pw_login
 from ..services.auth import get_current_user
 from ..services.crypto import decrypt, encrypt
 
@@ -129,6 +131,60 @@ def login_cookies(
         db,
         payload.username,
         ig_client.session_to_encrypted_blob(settings_dict),
+        encrypted_proxy=encrypt(proxy) if proxy else None,
+        proxy_type=ptype,
+    )
+    return IGLoginResponse(account=_to_out(account))
+
+
+@router.post("/login/playwright", response_model=IGLoginResponse)
+def login_playwright(
+    payload: IGLoginPlaywrightRequest, db: Session = Depends(get_db)
+) -> IGLoginResponse:
+    """Log in using a real headless Chromium browser via Playwright.
+
+    This gives Instagram a genuine browser fingerprint (Canvas, WebGL, real
+    cookies) rather than the instagrapi API fingerprint — significantly
+    reducing challenge / ban risk on first login from a VPS.
+    """
+    proxy = payload.proxy or None
+    try:
+        result = _pw_login.login_with_playwright(
+            username=payload.username,
+            password=payload.password,
+            proxy=proxy,
+            verification_code=payload.verification_code,
+        )
+    except _pw_login.PW2FARequired:
+        return IGLoginResponse(
+            account=AccountOut(
+                id=0,
+                username=payload.username,
+                is_active=False,
+                created_at=datetime.utcnow(),
+            ),
+            requires_2fa=True,
+            message="Two-factor code required. Resubmit with verification_code.",
+        )
+    except _pw_login.PWChallengeRequired as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except _pw_login.PWLoginError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    # Hand off real browser cookies to instagrapi to build a proper session
+    try:
+        _, settings_dict = ig_client.login_with_playwright_session(
+            payload.username, result["cookies"], proxy=proxy
+        )
+    except ig_client.IGClientError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    ptype = payload.proxy_type if payload.proxy_type in _VALID_PROXY_TYPES else None
+    account = _upsert_account(
+        db,
+        payload.username,
+        ig_client.session_to_encrypted_blob(settings_dict),
+        encrypted_password=encrypt(payload.password),
         encrypted_proxy=encrypt(proxy) if proxy else None,
         proxy_type=ptype,
     )

@@ -174,5 +174,39 @@ def restore_client(account: Account) -> Client:
     return cl
 
 
+def login_with_playwright_session(
+    username: str,
+    cookies: list[dict],
+    proxy: str | None = None,
+) -> tuple[Client, dict[str, Any]]:
+    """Build an instagrapi session from cookies extracted by Playwright.
+
+    Playwright gives us real browser cookies — we find the sessionid and
+    hand it to instagrapi's login_by_sessionid() which trusts it as a
+    legitimate browser session.
+    """
+    cl = _new_client(proxy)
+
+    sessionid: str | None = None
+    for c in cookies:
+        if c.get("name") == "sessionid":
+            sessionid = c["value"]
+            break
+
+    if not sessionid:
+        raise IGClientError("لم يتم العثور على sessionid في كوكيز المتصفح")
+
+    try:
+        cl.login_by_sessionid(sessionid)
+        cl.username = username
+        cl.account_info()   # validates the session is alive
+    except LoginRequired as exc:
+        raise IGClientError("الجلسة منتهية أو غير صالحة — أعد تسجيل الدخول") from exc
+    except Exception as exc:
+        raise IGClientError(f"فشل التحقق من الجلسة: {exc}") from exc
+
+    return cl, cl.get_settings()
+
+
 def session_to_encrypted_blob(settings_dict: dict[str, Any]) -> str:
     return crypto.encrypt(json.dumps(settings_dict))

@@ -58,3 +58,11 @@ class PersonalityUpdateRequest(BaseModel):
     skip_rate: float = Field(0.15, ge=0.05, le=0.35, description="Fraction of posts to skip randomly (5%-35%)")
     session_style: str = Field("moderate", description="active | moderate | quiet")
     warmup_count: int = Field(3, ge=1, le=5, description="Number of warm-up actions before engaging")
+
+
+class IGLoginPlaywrightRequest(BaseModel):
+    username: str = Field(..., min_length=1, max_length=100)
+    password: str = Field(..., min_length=1)
+    verification_code: str | None = None
+    proxy: str | None = None
+    proxy_type: str | None = None
