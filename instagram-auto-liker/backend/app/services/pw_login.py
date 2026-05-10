@@ -39,6 +39,33 @@ logger = logging.getLogger(__name__)
 _IG_LOGIN_URL = "https://www.instagram.com/accounts/login/"
 _IG_HOME_URL  = "https://www.instagram.com/"
 
+def ensure_chromium_installed() -> None:
+    """Install Playwright Chromium if the executable is not found.
+
+    Called once at app startup so the browser is always available even after
+    a fresh deployment or container restart that wiped the cache.
+    """
+    import subprocess
+    if _chromium_executable() is not None:
+        logger.info("[pw_login] Chromium already installed — skipping install")
+        return
+    logger.info("[pw_login] Chromium not found — running 'playwright install chromium' …")
+    try:
+        result = subprocess.run(
+            ["python3", "-m", "playwright", "install", "chromium"],
+            capture_output=True,
+            text=True,
+            timeout=300,
+        )
+        if result.returncode == 0:
+            path = _chromium_executable()
+            logger.info("[pw_login] Chromium installed at: %s", path)
+        else:
+            logger.error("[pw_login] playwright install failed:\n%s", result.stderr[:500])
+    except Exception as exc:
+        logger.error("[pw_login] Could not install Chromium: %s", exc)
+
+
 def _chromium_executable() -> str | None:
     """Return the best available Chromium executable path.
 

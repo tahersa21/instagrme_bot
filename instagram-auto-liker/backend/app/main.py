@@ -13,13 +13,17 @@ from .database import init_db
 from .routers import accounts, auth, logs, runs, targets, stats
 from .routers import settings as settings_router
 from .services import scheduler
+from .services.pw_login import ensure_chromium_installed
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    import asyncio
     init_db()
+    # Install Playwright Chromium in background — non-blocking for fast startup
+    asyncio.get_event_loop().run_in_executor(None, ensure_chromium_installed)
     scheduler.start_scheduler()
     yield
     scheduler.stop_scheduler()
