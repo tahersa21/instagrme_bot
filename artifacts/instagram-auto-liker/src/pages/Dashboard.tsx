@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
+import { AxiosError } from 'axios';
 import { Account, Personality, ProxyType, api } from '../api/client';
 
 const PROXY_LABELS: Record<NonNullable<ProxyType>, { label: string; color: string; dot: string }> = {
@@ -91,6 +92,16 @@ function AccountCard({
   onUpdate: () => void;
 }) {
   const [panel, setPanel] = useState<'none' | 'proxy' | 'personality' | 'totp'>('none');
+  const [reactivateError, setReactivateError] = useState<string | null>(null);
+
+  const reactivate = useMutation({
+    mutationFn: async () => (await api.patch<Account>(`/accounts/${acc.id}/reactivate`)).data,
+    onSuccess: () => { setReactivateError(null); onUpdate(); },
+    onError: (err: unknown) => {
+      const axiosErr = err as AxiosError<{ detail?: string }>;
+      setReactivateError(axiosErr.response?.data?.detail ?? 'فشل إعادة التنشيط');
+    },
+  });
 
   const togglePanel = (p: 'proxy' | 'personality' | 'totp') =>
     setPanel((cur) => (cur === p ? 'none' : p));
@@ -183,6 +194,9 @@ function AccountCard({
           {acc.last_error && (
             <p className="text-xs text-red-400 mt-1">خطأ: {acc.last_error}</p>
           )}
+          {reactivateError && (
+            <p className="text-xs text-red-400 mt-1">فشل إعادة التنشيط: {reactivateError}</p>
+          )}
         </div>
 
         <div className="flex gap-2 flex-wrap justify-end">
@@ -213,6 +227,16 @@ function AccountCard({
           >
             🔐 {acc.has_totp ? '2FA ✓' : '2FA'}
           </button>
+          {!acc.is_active && (
+            <button
+              type="button"
+              onClick={() => { setReactivateError(null); reactivate.mutate(); }}
+              disabled={reactivate.isPending}
+              className="btn-primary text-sm"
+            >
+              {reactivate.isPending ? 'جارٍ التنشيط...' : 'إعادة التنشيط'}
+            </button>
+          )}
           <button
             type="button"
             onClick={onRun}

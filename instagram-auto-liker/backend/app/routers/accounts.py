@@ -316,6 +316,22 @@ def update_personality(
     return _to_out(account)
 
 
+@router.patch("/{account_id}/reactivate", response_model=AccountOut)
+def reactivate_account(account_id: int, db: Session = Depends(get_db)) -> AccountOut:
+    """Attempt to reactivate an inactive account by re-logging in with the stored credentials."""
+    account = db.get(Account, account_id)
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+
+    try:
+        ig_client.relogin_account(account, db)
+    except ig_client.IGClientError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    db.refresh(account)
+    return _to_out(account)
+
+
 @router.delete("/{account_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_account(account_id: int, db: Session = Depends(get_db)) -> None:
     account = db.get(Account, account_id)
