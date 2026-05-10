@@ -39,24 +39,44 @@ logger = logging.getLogger(__name__)
 _IG_LOGIN_URL = "https://www.instagram.com/accounts/login/"
 _IG_HOME_URL  = "https://www.instagram.com/"
 
-# On Replit / NixOS the Playwright-bundled headless-shell is missing system libs.
-# The nix store ships a fully-linked Chromium that works out of the box.
-_NIX_CHROMIUM = (
-    "/nix/store/0n9rl5l9syy808xi9bk4f6dhnfrvhkww-playwright-browsers-chromium"
-    "/chromium-1080/chrome-linux/chrome"
-)
-
-
 def _chromium_executable() -> str | None:
-    """Return the best available Chromium executable path."""
-    # Prefer explicit override from environment
+    """Return the best available Chromium executable path.
+
+    Search order:
+    1. PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH env var (explicit override)
+    2. ms-playwright cache — full Chrome for Testing (preferred, avoids missing-lib issues)
+    3. nix-store Chromium (legacy Replit path, kept for backwards compat)
+    4. None → let Playwright resolve automatically (works on standard Linux VPS)
+    """
+    import glob
+
+    # 1. Explicit override
     env_path = os.environ.get("PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH")
     if env_path and os.path.isfile(env_path):
         return env_path
-    # Fall back to the nix-store bundled version (works on Replit)
-    if os.path.isfile(_NIX_CHROMIUM):
-        return _NIX_CHROMIUM
-    # Let Playwright find it automatically (works on standard Linux VPS)
+
+    # 2. ms-playwright cache — full Chrome for Testing (not headless-shell)
+    for pattern in [
+        os.path.expanduser("~/.cache/ms-playwright/chromium-*/chrome-linux64/chrome"),
+        "/home/runner/workspace/.cache/ms-playwright/chromium-*/chrome-linux64/chrome",
+        "/home/runner/workspace/.cache/ms-playwright/chromium-*/chrome-linux/chrome",
+    ]:
+        candidates = sorted(glob.glob(pattern), reverse=True)  # newest first
+        for c in candidates:
+            if os.path.isfile(c):
+                return c
+
+    # 3. Legacy nix-store paths (Replit NixOS, various hashes)
+    for pattern in [
+        "/nix/store/*playwright-browsers-chromium*/chromium-*/chrome-linux/chrome",
+        "/nix/store/*chromium*/chrome-linux/chrome",
+    ]:
+        candidates = glob.glob(pattern)
+        for c in candidates:
+            if os.path.isfile(c):
+                return c
+
+    # 4. Let Playwright decide (standard Linux VPS after `playwright install chromium`)
     return None
 
 
