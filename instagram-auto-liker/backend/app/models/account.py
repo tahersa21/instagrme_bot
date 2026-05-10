@@ -30,6 +30,10 @@ class Account(Base):
     # {"skip_rate": 0.15, "session_style": "moderate", "warmup_count": 3}
     personality: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    # Fernet-encrypted TOTP secret (Base32) for accounts with 2FA enabled
+    # Allows automatic 6-digit code generation at login time
+    encrypted_totp_secret: Mapped[str | None] = mapped_column(Text, nullable=True)
+
     is_active: Mapped[bool] = mapped_column(default=True, nullable=False)
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)

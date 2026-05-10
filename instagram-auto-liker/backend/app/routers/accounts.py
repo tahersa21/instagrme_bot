@@ -1,4 +1,4 @@
-"""Manage Instagram accounts: login (password / cookies), proxy, personality, list, delete."""
+"""Manage Instagram accounts: login (password / cookies / playwright), proxy, personality, TOTP, list, delete."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ import json
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -19,9 +20,11 @@ from ..schemas.account import (
     IGLoginResponse,
     PersonalityUpdateRequest,
     ProxyUpdateRequest,
+    TOTPUpdateRequest,
 )
 from ..services import ig_client
 from ..services import pw_login as _pw_login
+from ..services import totp as _totp
 from ..services.auth import get_current_user
 from ..services.crypto import decrypt, encrypt
 
@@ -41,6 +44,7 @@ def _upsert_account(
     encrypted_password: str | None = None,
     encrypted_proxy: str | None = ...,  # type: ignore[assignment]
     proxy_type: str | None = ...,  # type: ignore[assignment]
+    encrypted_totp_secret: str | None = ...,  # type: ignore[assignment]
 ) -> Account:
     account = db.scalar(select(Account).where(Account.username == username))
     if account is None:
@@ -53,6 +57,8 @@ def _upsert_account(
         account.encrypted_proxy = encrypted_proxy
     if proxy_type is not ...:
         account.proxy_type = proxy_type
+    if encrypted_totp_secret is not ...:
+        account.encrypted_totp_secret = encrypted_totp_secret
     account.is_active = True
     account.last_login_at = datetime.utcnow()
     account.last_error = None
@@ -64,7 +70,43 @@ def _upsert_account(
 def _to_out(account: Account) -> AccountOut:
     out = AccountOut.model_validate(account)
     out.has_proxy = bool(account.encrypted_proxy)
+    out.has_totp = bool(account.encrypted_totp_secret)
     return out
+
+
+def _resolve_verification_code(
+    totp_secret: str | None,
+    verification_code: str | None,
+) -> str | None:
+    """If a TOTP secret is provided, auto-generate the 6-digit code.
+    Falls back to the manually supplied verification_code if no secret given.
+    """
+    if totp_secret:
+        try:
+            return _totp.generate_code(totp_secret)
+        except _totp.TOTPError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return verification_code
+
+
+class _TOTPPreviewRequest(BaseModel):
+    totp_secret: str
+
+
+class _TOTPPreviewResponse(BaseModel):
+    code: str
+    remaining_seconds: int
+
+
+@router.post("/totp/preview", response_model=_TOTPPreviewResponse)
+def preview_totp(payload: _TOTPPreviewRequest) -> _TOTPPreviewResponse:
+    """Generate the current TOTP code for a given secret (for live UI preview)."""
+    try:
+        code = _totp.generate_code(payload.totp_secret)
+        remaining = _totp.time_remaining()
+    except _totp.TOTPError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return _TOTPPreviewResponse(code=code, remaining_seconds=remaining)
 
 
 @router.get("", response_model=list[AccountOut])
@@ -78,9 +120,10 @@ def login_password(
     payload: IGLoginPasswordRequest, db: Session = Depends(get_db)
 ) -> IGLoginResponse:
     proxy = payload.proxy or None
+    verification_code = _resolve_verification_code(payload.totp_secret, payload.verification_code)
     try:
         _, settings_dict = ig_client.login_with_password(
-            payload.username, payload.password, payload.verification_code, proxy=proxy
+            payload.username, payload.password, verification_code, proxy=proxy
         )
     except ig_client.IG2FARequired:
         return IGLoginResponse(
@@ -103,6 +146,7 @@ def login_password(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
     ptype = payload.proxy_type if payload.proxy_type in _VALID_PROXY_TYPES else None
+    enc_totp = encrypt(_totp.validate_secret(payload.totp_secret)) if payload.totp_secret else None
     account = _upsert_account(
         db,
         payload.username,
@@ -110,6 +154,7 @@ def login_password(
         encrypted_password=encrypt(payload.password),
         encrypted_proxy=encrypt(proxy) if proxy else None,
         proxy_type=ptype,
+        encrypted_totp_secret=enc_totp,
     )
     return IGLoginResponse(account=_to_out(account))
 
@@ -143,17 +188,17 @@ def login_playwright(
 ) -> IGLoginResponse:
     """Log in using a real headless Chromium browser via Playwright.
 
-    This gives Instagram a genuine browser fingerprint (Canvas, WebGL, real
-    cookies) rather than the instagrapi API fingerprint — significantly
-    reducing challenge / ban risk on first login from a VPS.
+    If totp_secret is provided, the 6-digit code is generated automatically
+    from it — no manual entry needed.
     """
     proxy = payload.proxy or None
+    verification_code = _resolve_verification_code(payload.totp_secret, payload.verification_code)
     try:
         result = _pw_login.login_with_playwright(
             username=payload.username,
             password=payload.password,
             proxy=proxy,
-            verification_code=payload.verification_code,
+            verification_code=verification_code,
         )
     except _pw_login.PW2FARequired:
         return IGLoginResponse(
@@ -171,7 +216,6 @@ def login_playwright(
     except _pw_login.PWLoginError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
-    # Hand off real browser cookies to instagrapi to build a proper session
     try:
         _, settings_dict = ig_client.login_with_playwright_session(
             payload.username, result["cookies"], proxy=proxy
@@ -180,6 +224,7 @@ def login_playwright(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
     ptype = payload.proxy_type if payload.proxy_type in _VALID_PROXY_TYPES else None
+    enc_totp = encrypt(_totp.validate_secret(payload.totp_secret)) if payload.totp_secret else None
     account = _upsert_account(
         db,
         payload.username,
@@ -187,8 +232,35 @@ def login_playwright(
         encrypted_password=encrypt(payload.password),
         encrypted_proxy=encrypt(proxy) if proxy else None,
         proxy_type=ptype,
+        encrypted_totp_secret=enc_totp,
     )
     return IGLoginResponse(account=_to_out(account))
+
+
+@router.patch("/{account_id}/totp", response_model=AccountOut)
+def update_totp(
+    account_id: int, payload: TOTPUpdateRequest, db: Session = Depends(get_db)
+) -> AccountOut:
+    """Set or remove the TOTP secret for an existing account.
+
+    Send ``totp_secret: null`` to disable automatic 2FA code generation.
+    """
+    account = db.get(Account, account_id)
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+
+    if payload.totp_secret:
+        try:
+            clean = _totp.validate_secret(payload.totp_secret)
+        except _totp.TOTPError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        account.encrypted_totp_secret = encrypt(clean)
+    else:
+        account.encrypted_totp_secret = None
+
+    db.commit()
+    db.refresh(account)
+    return _to_out(account)
 
 
 @router.patch("/{account_id}/proxy", response_model=AccountOut)

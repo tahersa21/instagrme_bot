@@ -47,6 +47,7 @@ export type Account = {
   username: string;
   is_active: boolean;
   has_proxy: boolean;
+  has_totp: boolean;
   proxy_type: ProxyType;
   personality: string | null;
   last_login_at: string | null;

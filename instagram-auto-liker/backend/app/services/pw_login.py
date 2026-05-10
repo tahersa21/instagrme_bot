@@ -244,10 +244,22 @@ async def _do_login(
                         pass
 
                 await _random_sleep(0.5, 1.0)
-                confirm_btn = page.locator('button[type="button"]').filter(has_text="Confirm").first
-                try:
-                    await confirm_btn.click(timeout=3000)
-                except Exception:
+                confirm_selectors = [
+                    'button:has-text("Confirm")',
+                    'button:has-text("Verify")',
+                    'button[type="submit"]',
+                ]
+                clicked = False
+                for sel in confirm_selectors:
+                    try:
+                        btn = page.locator(sel).first
+                        if await btn.is_visible(timeout=1500):
+                            await btn.click()
+                            clicked = True
+                            break
+                    except Exception:
+                        pass
+                if not clicked:
                     await page.keyboard.press("Enter")
 
                 try:

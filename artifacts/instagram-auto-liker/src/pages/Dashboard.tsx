@@ -90,9 +90,9 @@ function AccountCard({
   runPending: boolean;
   onUpdate: () => void;
 }) {
-  const [panel, setPanel] = useState<'none' | 'proxy' | 'personality'>('none');
+  const [panel, setPanel] = useState<'none' | 'proxy' | 'personality' | 'totp'>('none');
 
-  const togglePanel = (p: 'proxy' | 'personality') =>
+  const togglePanel = (p: 'proxy' | 'personality' | 'totp') =>
     setPanel((cur) => (cur === p ? 'none' : p));
 
   const parsedPersonality: Personality = (() => {
@@ -141,6 +141,13 @@ function AccountCard({
               {styleMeta.label} · تخطي {Math.round(parsedPersonality.skip_rate * 100)}%
             </span>
 
+            {/* TOTP badge */}
+            {acc.has_totp ? (
+              <span className="px-2 py-0.5 rounded text-xs bg-purple-900/40 text-purple-300">
+                🔐 2FA تلقائي
+              </span>
+            ) : null}
+
             {/* New-account warning */}
             {ageDays < 30 && (
               <span className="px-2 py-0.5 rounded text-xs bg-orange-900/40 text-orange-300">
@@ -180,6 +187,13 @@ function AccountCard({
           </button>
           <button
             type="button"
+            onClick={() => togglePanel('totp')}
+            className={`btn-secondary text-sm ${panel === 'totp' ? 'ring-1 ring-purple-500' : ''}`}
+          >
+            🔐 {acc.has_totp ? '2FA ✓' : '2FA'}
+          </button>
+          <button
+            type="button"
             onClick={onRun}
             disabled={runPending}
             className="btn-primary text-sm"
@@ -193,13 +207,141 @@ function AccountCard({
       </div>
 
       {/* ── Proxy panel ── */}
-      {panel === 'proxy' && (
-        <ProxyPanel acc={acc} onUpdate={onUpdate} />
-      )}
+      {panel === 'proxy' && <ProxyPanel acc={acc} onUpdate={onUpdate} />}
 
       {/* ── Personality panel ── */}
       {panel === 'personality' && (
         <PersonalityPanel acc={acc} current={parsedPersonality} onUpdate={onUpdate} />
+      )}
+
+      {/* ── TOTP panel ── */}
+      {panel === 'totp' && <TotpPanel acc={acc} onUpdate={onUpdate} />}
+    </div>
+  );
+}
+
+/* ── TotpPanel ──────────────────────────────────────────────────────────── */
+function TotpPanel({ acc, onUpdate }: { acc: Account; onUpdate: () => void }) {
+  const [secret, setSecret] = useState('');
+  const [liveCode, setLiveCode] = useState('——————');
+  const [remaining, setRemaining] = useState(30);
+  const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
+
+  /* countdown timer */
+  useEffect(() => {
+    const iv = setInterval(() => {
+      const rem = 30 - Math.floor(Date.now() / 1000) % 30;
+      setRemaining(rem);
+    }, 1000);
+    return () => clearInterval(iv);
+  }, []);
+
+  /* refresh preview when window resets or secret changes */
+  const fetchPreview = async (s: string) => {
+    if (!s.trim() || s.trim().length < 16) { setLiveCode('——————'); return; }
+    try {
+      const { data } = await api.post<{ code: string }>('/accounts/totp/preview', { totp_secret: s.trim().replace(/[\s-]/g, '') });
+      setLiveCode(data.code);
+    } catch { setLiveCode('خطأ'); }
+  };
+
+  useEffect(() => { fetchPreview(secret); }, [secret]);
+  useEffect(() => { if (remaining === 30) fetchPreview(secret); }, [remaining]);
+
+  const save = useMutation({
+    mutationFn: async () =>
+      (await api.patch<Account>(`/accounts/${acc.id}/totp`, {
+        totp_secret: secret.trim().replace(/[\s-]/g, '') || null,
+      })).data,
+    onSuccess: () => { setMsg({ text: 'تم حفظ مفتاح 2FA.', ok: true }); onUpdate(); },
+    onError: (err: any) => setMsg({ text: err?.response?.data?.detail ?? 'خطأ', ok: false }),
+  });
+
+  const remove = useMutation({
+    mutationFn: async () =>
+      (await api.patch<Account>(`/accounts/${acc.id}/totp`, { totp_secret: null })).data,
+    onSuccess: () => { setSecret(''); setLiveCode('——————'); setMsg({ text: 'تم حذف مفتاح 2FA.', ok: true }); onUpdate(); },
+    onError: () => setMsg({ text: 'خطأ أثناء الحذف', ok: false }),
+  });
+
+  const barPct = ((30 - remaining) / 30) * 100;
+  const barColor = remaining <= 5 ? '#ef4444' : remaining <= 10 ? '#f59e0b' : '#22c55e';
+  const isBusy = save.isPending || remove.isPending;
+
+  return (
+    <div className="border-t border-slate-800 pt-4 space-y-4">
+      <div className="flex items-center justify-between">
+        <p className="text-sm font-medium text-slate-300">التحقق الثنائي التلقائي (2FA / TOTP)</p>
+        {acc.has_totp && (
+          <span className="text-xs bg-purple-900/40 text-purple-300 px-2 py-0.5 rounded">
+            🔐 مُفعَّل
+          </span>
+        )}
+      </div>
+      <p className="text-xs text-slate-500">
+        {acc.has_totp
+          ? 'مفتاح TOTP محفوظ — يُولَّد رمز 2FA تلقائياً عند كل تسجيل دخول'
+          : 'أضف مفتاح TOTP لتسجيل الدخول التلقائي بدون تدخل يدوي'}
+      </p>
+
+      {/* Secret input */}
+      <label className="block">
+        <span className="text-xs text-slate-400">مفتاح TOTP السري (Base32)</span>
+        <input
+          className="input mt-1 font-mono text-sm tracking-widest"
+          value={secret}
+          onChange={(e) => setSecret(e.target.value)}
+          placeholder="JBSWY3DPEHPK3PXP"
+          dir="ltr"
+          autoComplete="off"
+        />
+        <p className="text-xs text-slate-600 mt-1">
+          Instagram → الإعدادات → الأمان → التحقق بخطوتين → تطبيق المصادقة → &quot;لا أستطيع مسح الرمز&quot;
+        </p>
+      </label>
+
+      {/* Live preview */}
+      {secret.trim().length >= 8 && (
+        <div className="rounded-lg bg-slate-900 border border-slate-700 px-4 py-3 space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-slate-400">الرمز الحالي (مباشر):</span>
+            <span className="text-xs text-slate-500">يتجدد خلال {remaining}ث</span>
+          </div>
+          <span className="font-mono text-2xl font-bold tracking-widest text-green-400 select-all">
+            {liveCode.length === 6 ? `${liveCode.slice(0, 3)} ${liveCode.slice(3)}` : liveCode}
+          </span>
+          <div className="h-1 bg-slate-800 rounded-full overflow-hidden">
+            <div
+              className="h-full rounded-full transition-all duration-1000"
+              style={{ width: `${barPct}%`, backgroundColor: barColor }}
+            />
+          </div>
+        </div>
+      )}
+
+      <div className="flex gap-2">
+        <button
+          type="button"
+          className="btn-primary text-sm"
+          onClick={() => { setMsg(null); save.mutate(); }}
+          disabled={isBusy || !secret.trim()}
+        >
+          {save.isPending ? 'جارٍ الحفظ...' : 'حفظ المفتاح'}
+        </button>
+        {acc.has_totp && (
+          <button
+            type="button"
+            className="btn-danger text-sm"
+            onClick={() => { setMsg(null); remove.mutate(); }}
+            disabled={isBusy}
+          >
+            {remove.isPending ? '...' : 'حذف المفتاح'}
+          </button>
+        )}
+      </div>
+
+      {msg && (
+        <p className={`text-xs ${msg.ok ? 'text-green-400' : 'text-red-400'}`}>{msg.text}</p>
       )}
     </div>
   );

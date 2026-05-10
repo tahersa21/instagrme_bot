@@ -10,6 +10,7 @@ class AccountOut(BaseModel):
     username: str
     is_active: bool
     has_proxy: bool = False
+    has_totp: bool = False
     proxy_type: str | None = None
     personality: str | None = None
     last_login_at: datetime | None = None
@@ -21,6 +22,8 @@ class AccountOut(BaseModel):
         instance = super().model_validate(obj, **kw)
         if hasattr(obj, "encrypted_proxy"):
             instance.has_proxy = bool(obj.encrypted_proxy)
+        if hasattr(obj, "encrypted_totp_secret"):
+            instance.has_totp = bool(obj.encrypted_totp_secret)
         return instance
 
 
@@ -28,6 +31,7 @@ class IGLoginPasswordRequest(BaseModel):
     username: str = Field(..., min_length=1, max_length=100)
     password: str = Field(..., min_length=1)
     verification_code: str | None = None
+    totp_secret: str | None = None
     proxy: str | None = None
     proxy_type: str | None = None
 
@@ -64,5 +68,13 @@ class IGLoginPlaywrightRequest(BaseModel):
     username: str = Field(..., min_length=1, max_length=100)
     password: str = Field(..., min_length=1)
     verification_code: str | None = None
+    totp_secret: str | None = None
     proxy: str | None = None
     proxy_type: str | None = None
+
+
+class TOTPUpdateRequest(BaseModel):
+    totp_secret: str | None = Field(
+        None,
+        description="Base32 TOTP secret from authenticator app. Send null to remove.",
+    )

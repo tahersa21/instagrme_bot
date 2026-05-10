@@ -47,6 +47,7 @@ def init_db() -> None:
         # New columns
         "ALTER TABLE accounts ADD COLUMN IF NOT EXISTS proxy_type VARCHAR(20)",
         "ALTER TABLE accounts ADD COLUMN IF NOT EXISTS personality TEXT",
+        "ALTER TABLE accounts ADD COLUMN IF NOT EXISTS encrypted_totp_secret TEXT",
     ]
     with engine.begin() as conn:
         for stmt in _pg_migrations:
