@@ -120,7 +120,8 @@ instagram-auto-liker/backend/app/
 
 ## قرارات معمارية
 
-- **Playwright على Replit**: البيئة Ubuntu 24.04 وليس NixOS. Chrome for Testing يحتاج ~25 مكتبة نظام (glib، nspr، nss، atk، cups...) تُثبَّت عبر Nix (`installSystemDependencies`). `apt-get` محجوب في Replit. `ensure_chromium_installed()` تُشغَّل بشكل متزامن عند startup وتتحقق بـ `ldd` أن جميع المكتبات محلولة. يمكن تجاوز المسار عبر `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH`.
+- **Playwright على Replit**: البيئة Ubuntu 24.04 وليس NixOS. Chrome for Testing يحتاج ~25 مكتبة نظام (glib، nspr، nss، atk، cups...) تُثبَّت عبر Nix (`installSystemDependencies`). `apt-get` محجوب في Replit. `ensure_chromium_installed()` تُشغَّل في **background thread** (`run_in_executor`) عند startup حتى يبدأ uvicorn فوراً ويجتاز فحص الصحة — ثم تكتمل عملية التثبيت في الخلفية. تتحقق بـ `ldd` أن جميع المكتبات محلولة. يمكن تجاوز المسار عبر `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH`.
+- **health check path**: يجب أن يكون `/api/health` (GET → 200) في `artifact.toml`. لا تستخدم `/api/auth/login` لأنه يقبل POST فقط ويُعيد 405 على GET مما يُفشل فحص النشر.
 - **تشفير ثنائي المستوى**: كلمات المرور + ملفات الجلسة + مفاتيح TOTP + البروكسي — كلها مشفرة بـ Fernet قبل التخزين.
 - **APScheduler داخل FastAPI**: يعمل الجدولة في نفس العملية، يبدأ عند `startup` وينتهي عند `shutdown`.
 - **auth endpoint**: يستخدم `OAuth2PasswordRequestForm` → يجب إرسال البيانات كـ `application/x-www-form-urlencoded` وليس JSON.
