@@ -21,7 +21,7 @@ args = ["bash", "-c", "cd /home/runner/workspace/instagram-auto-liker/backend &&
 PORT = "8080"
 
 [services.production.health.startup]
-path = "/api/auth/login"
+path = "/api/health"
 
 [services.env]
 PORT = "8080"
