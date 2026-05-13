@@ -18,4 +18,6 @@ dependencies = [
     "python-multipart>=0.0.9",
     "sqlalchemy>=2.0.30",
     "uvicorn[standard]>=0.30.0",
+    "playwright>=1.44",
+    "pyotp>=2.9",
 ]
