@@ -29,6 +29,15 @@ export default function Layout() {
           <NavLink to="/ig-login" className={navClass}>
             تسجيل دخول Instagram
           </NavLink>
+          <NavLink to="/create-account" className={navClass}>
+            إنشاء حساب تلقائي
+          </NavLink>
+          <NavLink to="/domains" className={navClass}>
+            النطاقات (Mailgun)
+          </NavLink>
+          <NavLink to="/sms-providers" className={navClass}>
+            مزوّدو SMS
+          </NavLink>
           <NavLink to="/schedule" className={navClass}>
             الجدولة والحدود
           </NavLink>

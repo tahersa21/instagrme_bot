@@ -114,6 +114,49 @@ export type ScheduleSettings = {
   new_account_mode: boolean;
 };
 
+export type Domain = {
+  id: number;
+  name: string;
+  mailgun_domain: string;
+  is_default: boolean;
+  notes: string | null;
+  has_api_key: boolean;
+  created_at: string;
+};
+
+export type SmsProvider = {
+  id: number;
+  name: string;
+  provider_type: 'sms-activate' | '5sim';
+  country_code: string;
+  is_default: boolean;
+  has_api_key: boolean;
+  created_at: string;
+};
+
+export type AccountCreationJob = {
+  id: number;
+  status:
+    | 'pending'
+    | 'running'
+    | 'email_otp_wait'
+    | 'phone_otp_wait'
+    | 'success'
+    | 'failed';
+  domain_id: number;
+  sms_provider_id: number | null;
+  full_name: string;
+  username: string;
+  email: string;
+  phone_number: string | null;
+  created_account_id: number | null;
+  error: string | null;
+  logs: { ts: string; msg: string }[];
+  started_at: string | null;
+  finished_at: string | null;
+  created_at: string;
+};
+
 export type StatsOverview = {
   total_7d: number;
   today_likes: number;
